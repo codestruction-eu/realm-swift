@@ -300,43 +300,6 @@ class SwiftObjectServerTests: SwiftSyncTestCase {
 
     // MARK: - Client reset
 
-    func waitForSyncDisabled(flexibleSync: Bool = false, appServerId: String, syncServiceId: String) {
-        XCTAssertTrue(try RealmServer.shared.isSyncEnabled(flexibleSync: flexibleSync, appServerId: appServerId, syncServiceId: syncServiceId))
-        _ = expectSuccess(RealmServer.shared.disableSync(
-            flexibleSync: flexibleSync, appServerId: appServerId, syncServiceId: syncServiceId))
-        XCTAssertFalse(try RealmServer.shared.isSyncEnabled(appServerId: appServerId, syncServiceId: syncServiceId))
-    }
-
-    func waitForSyncEnabled(flexibleSync: Bool = false, appServerId: String, syncServiceId: String, syncServiceConfig: [String: Any]) {
-        while true {
-            do {
-                _ = try RealmServer.shared.enableSync(
-                    flexibleSync: flexibleSync, appServerId: appServerId,
-                    syncServiceId: syncServiceId, syncServiceConfiguration: syncServiceConfig).get()
-                break
-            } catch {
-                // "cannot transition sync service state to \"enabled\" while sync is being terminated. Please try again in a few minutes after sync termination has completed"
-                guard error.localizedDescription.contains("Please try again in a few minutes") else {
-                    XCTFail("\(error))")
-                    return
-                }
-                print("waiting for sync to terminate...")
-                sleep(1)
-            }
-        }
-        XCTAssertTrue(try RealmServer.shared.isSyncEnabled(flexibleSync: flexibleSync, appServerId: appServerId, syncServiceId: syncServiceId))
-    }
-
-    func waitForDevModeEnabled(appServerId: String, syncServiceId: String, syncServiceConfig: [String: Any]) throws {
-        let devModeEnabled = try RealmServer.shared.isDevModeEnabled(appServerId: appServerId, syncServiceId: syncServiceId)
-        if !devModeEnabled {
-            _ = expectSuccess(RealmServer.shared.enableDevMode(
-                appServerId: appServerId, syncServiceId: syncServiceId,
-                syncServiceConfiguration: syncServiceConfig))
-        }
-        XCTAssertTrue(try RealmServer.shared.isDevModeEnabled(appServerId: appServerId, syncServiceId: syncServiceId))
-    }
-
     // Uses admin API to toggle recovery mode on the baas server
     func waitForEditRecoveryMode(flexibleSync: Bool = false, appId: String, disable: Bool) throws {
         // Retrieve server IDs
@@ -347,20 +310,6 @@ class SwiftObjectServerTests: SwiftSyncTestCase {
         _ = expectSuccess(RealmServer.shared.patchRecoveryMode(
             flexibleSync: flexibleSync, disable: disable, appServerId,
             syncServiceId, syncServiceConfig))
-    }
-
-    // This function disables sync, executes a block while the sync service is disabled, then re-enables the sync service and dev mode.
-    func executeBlockOffline(flexibleSync: Bool = false, appId: String, block: () throws -> Void) throws {
-        let appServerId = try RealmServer.shared.retrieveAppServerId(appId)
-        let syncServiceId = try RealmServer.shared.retrieveSyncServiceId(appServerId: appServerId)
-        guard let syncServiceConfig = try RealmServer.shared.getSyncServiceConfiguration(appServerId: appServerId, syncServiceId: syncServiceId) else { fatalError("precondition failure: no sync service configuration found") }
-
-        waitForSyncDisabled(flexibleSync: flexibleSync, appServerId: appServerId, syncServiceId: syncServiceId)
-
-        try autoreleasepool(invoking: block)
-
-        waitForSyncEnabled(flexibleSync: flexibleSync, appServerId: appServerId, syncServiceId: syncServiceId, syncServiceConfig: syncServiceConfig)
-        try waitForDevModeEnabled(appServerId: appServerId, syncServiceId: syncServiceId, syncServiceConfig: syncServiceConfig)
     }
 
     func expectSyncError(_ fn: () -> Void) -> SyncError? {
@@ -418,12 +367,16 @@ class SwiftObjectServerTests: SwiftSyncTestCase {
     // to resynthesize the new history from existing objects on the server.
     // This method creates a new document on the server and then waits for it to
     // be synchronized to a newly created Realm to confirm everything is up-to-date.
-    func waitForServerHistoryAfterRestart(config: Realm.Configuration, collection: MongoCollection) {
+    func waitForServerHistoryAfterRestart(config: Realm.Configuration, objectType: Object.Type) {
+        var config = config
+        config.fileURL = RLMTestRealmURL()
+        config.objectTypes = [objectType]
         XCTAssertFalse(FileManager.default.fileExists(atPath: config.fileURL!.path))
         let realm = Realm.asyncOpen(configuration: config).await(self)
         XCTAssertTrue(realm.isEmpty)
 
         // Create an object on the server which should be present after client reset
+        let collection = config.syncConfiguration!.user.collection(for: objectType)
         removeAllFromCollection(collection)
         let serverObject: Document = [
             "_id": .objectId(ObjectId.generate()),
@@ -446,7 +399,6 @@ class SwiftObjectServerTests: SwiftSyncTestCase {
             XCTAssertEqual(realm.objects(SwiftPerson.self)[0].firstName, "Paul")
         } else {
             XCTFail("Waited longer than one minute for history to resynthesize")
-            return
         }
     }
 
@@ -467,11 +419,9 @@ class SwiftObjectServerTests: SwiftSyncTestCase {
             XCTAssertEqual(realm.objects(SwiftPerson.self).count, 1)
         }
 
-        var config = user.configuration(partitionValue: partition)
-        config.fileURL = RLMTestRealmURL()
-        config.objectTypes = [SwiftPerson.self]
         autoreleasepool {
-            waitForServerHistoryAfterRestart(config: config, collection: user.collection(for: SwiftPerson.self))
+            waitForServerHistoryAfterRestart(config: user.configuration(partitionValue: partition),
+                                             objectType: SwiftPerson.self)
         }
     }
 
@@ -496,30 +446,23 @@ class SwiftObjectServerTests: SwiftSyncTestCase {
             let realm = try Realm(configuration: configuration)
             let subscriptions = realm.subscriptions
             updateAllPeopleSubscription(subscriptions)
-        }
 
-        // Sync is disabled, block executed, sync re-enabled
-        try executeBlockOffline(flexibleSync: true, appId: appId) {
-            var configuration = user.flexibleSyncConfiguration()
-            configuration.objectTypes = [SwiftPerson.self]
-            let realm = try Realm(configuration: configuration)
-            let syncSession = realm.syncSession!
-            syncSession.suspend()
-
+            realm.syncSession!.suspend()
+            // Add an object to the local realm that won't be synced due to the suspend
             try realm.write {
-                // Add an object to the local realm that will not be in the server realm (because sync is disabled).
                 realm.add(SwiftPerson(firstName: "John", lastName: "L"))
             }
             XCTAssertEqual(realm.objects(SwiftPerson.self).count, 1)
+
+            // Tell the server to trigger a client reset the next time we connect
+            try RealmServer.shared.triggerClientReset(appId, realm)
         }
 
         autoreleasepool {
-            var config = user.flexibleSyncConfiguration { subscriptions in
+            let config = user.flexibleSyncConfiguration { subscriptions in
                 subscriptions.append(QuerySubscription<SwiftPerson>(name: "all_people"))
             }
-            config.fileURL = RLMTestRealmURL()
-            config.objectTypes = [SwiftPerson.self]
-            waitForServerHistoryAfterRestart(config: config, collection: collection)
+            waitForServerHistoryAfterRestart(config: config, objectType: SwiftPerson.self)
         }
 
         // Object created above should not have been synced
