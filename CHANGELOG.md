@@ -10,15 +10,64 @@ x.y.z Release notes (yyyy-MM-dd)
   }
   try await realm.syncSession?.wait(for: .upload)
   ```  
-  Note that this should not generally be used– sync is eventually consistent 
-  and should be used as such. However, there are special cases (notable in 
+  Note that this should not generally be used; sync is eventually consistent
+  and should be used as such. However, there are special cases (notable in
   testing) where this may be used.
+* Sync subscription change notifications are now cancelled if the sync session
+  becomes inactive as is done for upload and download progress handlers. If a
+  fatal sync error occurs it will be reported to the completion handler, and
+  if the user is logged out an "operation cancelled" error will be reported.
+  Non-fatal errors are unchanged (i.e. the sync client internally retries
+  without reporting errors). Previously fatal errors would result in the
+  completion handler never being called.
+  ([Core #7073](https://github.com/realm/realm-core/pull/7073))
 
 ### Fixed
-* <How to hit and notice issue? what was the impact?> ([#????](https://github.com/realm/realm-swift/issues/????), since v?.?.?)
-* None.
-
-<!-- ### Breaking Changes - ONLY INCLUDE FOR NEW MAJOR version -->
+* Flexible sync subscriptions would sometimes not be sent to the server if they
+  were created while the client was downloading the bootstrap state for a
+  previous subscription change and the bootstrap did not complete successfully.
+  ([Core #7077](https://github.com/realm/realm-core/issues/7077), since v10.21.1)
+* Flexible sync subscriptions would sometimes not be sent to the server if an
+  UPLOAD message was sent immediately after the subscription was created.
+  ([Core #7076](https://github.com/realm/realm-core/issues/7076), since v10.43.1)
+* Creating or removing flexible sync subscriptions while a client reset with
+  automatic recovery enabled was being processed in the background would
+  occasionally crash with a `KeyNotFound` exception.
+  ([Core #7090](https://github.com/realm/realm-core/issues/7090), since v10.28.2)
+* Automatic client reset recovery would sometimes fail with the error "Invalid
+  schema change (UPLOAD): cannot process AddColumn instruction for non-existent
+  table" when recovering schema changes while made offline. This would only
+  occur if the server is using the recently introduced option to allow breaking
+  schema changes in developer mode. ([Core #7042](https://github.com/realm/realm-core/pull/7042)).
+* `MutableSet<String>.formIntersection()` would sometimes cause a
+  use-after-free if asked to intersect a set with itself (since v10.0.0).
+* Errors encountered while reapplying local changes for client reset recovery
+  on partition-based sync Realms would result in the client reset attempt not
+  being recorded, possibly resulting in an endless loop of attempting and
+  failing to automatically recover the client reset. Flexible sync and errors
+  from the server after completing the local recovery were handled correctly
+  ([Core #7149](https://github.com/realm/realm-core/pull/7149), since v10.0.0).
+* During a client reset with recovery when recovering a move or set operation
+  on a `List<Object>` or `List<AnyRealmValue>` that operated on indices that
+  were not also added in the recovery, links to an object which had been
+  deleted by another client while offline would be recreated by the recovering
+  client, but the objects of these links would only have the primary key
+  populated and all other fields would be default values. Now, instead of
+  creating these zombie objects, the lists being recovered skip such deleted
+  links. ([Core #7112](https://github.com/realm/realm-core/issues/7112),
+  since client reset recovery was implemented in v10.25.0).
+* During a client reset recovery a Set of links could be missing items, or an
+  exception could be thrown that prevents recovery (e.g. "Requested index 1 calling get() on set 'source.collection' when max is 0")
+  ([Core #7112](https://github.com/realm/realm-core/issues/7112),
+  since client reset recovery was implemented in v10.25.0).
+* Calling `sort()` or `distinct()` on a `MutableSet<Object>` that had
+  unresolved links in it (i.e. objects which had been deleted by a different
+  sync client) would produce a Results with duplicate entries.
+* Automatic client reset recovery would duplicate insertions in a list when
+  recovering a write which made an unrecoverable change to a list (i.e.
+  modifying or deleting a pre-existing entry), followed by a subscription
+  change, followed by a write which added an entry to the list
+  ([Core #7155](https://github.com/realm/realm-core/pull/7155), since the introduction of automatic client reset recovery for flexible sync).
 
 ### Compatibility
 * Realm Studio: 14.0.1 or later.
@@ -28,8 +77,8 @@ x.y.z Release notes (yyyy-MM-dd)
 * Xcode: 14.1-15.0.0.
 
 ### Internal
-* Upgraded realm-core from ? to ?
 * Migrated our current CI Pipelines to Xcode Cloud.
+* Upgraded realm-core from 13.23.1 to 13.24.0
 
 10.44.0 Release notes (2023-10-29)
 =============================================================
