@@ -31,11 +31,11 @@ fi
 
 if [ -n "$CI" ]; then
     DERIVED_DATA="$CI_DERIVED_DATA_PATH"
-    ROOT_WORKSPACE="$CI_WORKSPACE/"
+    ROOT_WORKSPACE="$CI_WORKSPACE"
     BRANCH="$CI_BRANCH"
 else
     DERIVED_DATA="build/DerivedData/Realm"
-    ROOT_WORKSPACE=""
+    ROOT_WORKSPACE="$(pwd)"
     BRANCH="$(git branch --show-current)"
 fi
 
@@ -187,7 +187,7 @@ build_combined() {
     local product_name="$product.framework"
     local os_path="$build_products_path/$config${config_suffix}/$product_name"
     local simulator_path="$build_products_path/$config-$simulator_suffix/$product_name"
-    local out_path="build/$config/$platform"
+    local out_path="$ROOT_WORKSPACE/$config/$platform"
     local xcframework_path="$out_path/$product.xcframework"
 
     # Build for each platform
@@ -308,7 +308,7 @@ fi
 ######################################
 
 COMMAND="$1"
-LINKAGE="Dynamic"
+LINKAGE="dynamic"
 
 # Use Debug config if command ends with -debug, otherwise default to Release
 case "$COMMAND" in
@@ -318,7 +318,7 @@ case "$COMMAND" in
         ;;
     *-static)
         COMMAND="${COMMAND%-static}"
-        LINKAGE="Static"
+        LINKAGE="static"
         CONFIGURATION="Static"
         ;;
 esac
@@ -992,6 +992,12 @@ case "$COMMAND" in
         exit 0
         ;;
 
+    "prepare-release-changelog")
+        realm_version="$2"
+
+        exit 0
+        ;;
+
     "set-core-version")
         new_version="$2"
         old_version="$(sed -n 's/^REALM_CORE_VERSION=\(.*\)$/\1/p' "${source_root}/dependencies.list")"
@@ -1069,59 +1075,138 @@ case "$COMMAND" in
     # Release packaging
     ######################################
 
-    "package-docs")
-        sh scripts/reset-simulators.sh
-        sh build.sh docs
-        cd docs
-        zip -r realm-docs.zip objc_output swift_output
-        ;;
-
-    "package-examples")
+    "release_package-examples")
         ./scripts/package_examples.rb
         zip --symlinks -r realm-examples.zip examples -x "examples/installation/*"
+        ./scripts/github_prepare.rb --upload-product realm-examples.zip --path "${GITHUB_WORKSPACE}/realm-examples.zip"
         ;;
 
-    "package-build-scripts")
-        zip -r build-scripts.zip build.sh dependencies.list scripts examples/installation
+    "release_package-docs")
+        sh build.sh docs
+        zip -r docs/realm-docs.zip docs/objc_output docs/swift_output
+        ./scripts/github_prepare.rb --upload-product realm-docs.zip --path "${ROOT_WORKSPACE}/docs/realm-docs.zip"
         ;;
 
-    "package-test-examples")
+    ("release_package")
+        XCODE_VERSION="$2"
+        PLATFORMS=$(./scripts/release-matrix.rb plaforms_for_version $XCODE_VERSION)
+        PLATFORMS_ARRAY=(${PLATFORMS//,/ })
+
+        # Package examples for package
+        ./scripts/package_examples.rb
+        zip --symlinks -r realm-examples.zip examples -x "examples/installation/*"
+
+        # Create frameworks for each platform and zip it
+        for platform in ${PLATFORMS_ARRAY[@]}; do
+            sh build.sh "$platform-swift"
+            if [[ "$platform" == ios ]]; then
+                sh build.sh "$platform-static"
+            else
+                mkdir -p build/Static
+            fi
+
+            FILE_NAME="realm-${platform}-${XCODE_VERSION}"
+            zip --symlinks -r "${FILE_NAME}.zip" "Release/${platform}" "Static/${platform}"
+        done
+
+        # Create Realm(Static)/RealmSwift XCFrameworks zips combining all the platforms frameworks
+        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${source_root}/dependencies.list")"
+        find . -name 'realm-*-1*.zip' -maxdepth 1 \
+            | sed 's@./realm-[a-z]*-\(.*\).zip@\1@' \
+            | sort -u --version-sort \
+            | xargs ./scripts/create-release-package.rb create-version-xcframeworks "${ROOT_WORKSPACE}/pkg" "${VERSION}" "${XCODE_VERSION}"
+        
+
+        echo "Uploading data into draft release"
+        # Upload RealmSwift zips to draft release
+        ./scripts/github_prepare.rb --upload-product "realm-swift-${VERSION}_${XCODE_VERSION}.zip" --path "${ROOT_WORKSPACE}/pkg/realm-swift-${VERSION}_${XCODE_VERSION}.zip"
+        ./scripts/github_prepare.rb --upload-product "RealmSwift@${XCODE_VERSION}.spm.zip" --path "${ROOT_WORKSPACE}/pkg/RealmSwift@${XCODE_VERSION}.spm.zip"
+
+        # Upload Realm zips to draft release, only for latest xcode version
+        if [ -f "${ROOT_WORKSPACE}/pkg/Realm.spm.zip" ]; then 
+            ./scripts/github_prepare.rb --upload-product "Realm.spm.zip" --path "${ROOT_WORKSPACE}/pkg/Realm.spm.zip"
+            ./scripts/github_prepare.rb --upload-product "Carthage.xcframework.zip" --path "${ROOT_WORKSPACE}/pkg/Carthage.xcframework.zip"
+        fi
+        ;;
+
+    ("release_package-all")
+        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${source_root}/dependencies.list")"
+        XCODE_VERSIONS=$(./scripts/release-matrix.rb xcode_versions)
+        XCODE_VERSIONS_ARRAY=(${XCODE_VERSIONS//,/ })
+
+        # Download RealmSwift.xcframework/Realm.xcframework for each xcode version and pack it in a package containig all of them, created in the prepare step.
+        file_name=realm-swift-${VERSION}
+        for xcode_version in ${XCODE_VERSIONS_ARRAY[@]}; do
+            ./scripts/github_prepare.rb --download-asset "${file_name}_${xcode_version}.zip" --path "${GITHUB_WORKSPACE}/${file_name}_${xcode_version}.zip"
+
+            unzip -o "${file_name}_${xcode_version}.zip"
+        done
+
+        zip --symlinks -r "${ROOT_WORKSPACE}/${file_name}.zip" "${file_name}"
+
+        ./scripts/github_prepare.rb --upload-product "${file_name}.zip" --path "${GITHUB_WORKSPACE}/${file_name}.zip"
+        ;;
+
+    ("release_test-package-examples")
         VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${source_root}/dependencies.list")"
         dir="realm-swift-${VERSION}"
+
+        # Download package
+        ./scripts/github_prepare.rb --download-asset "${dir}.zip" --path "${ROOT_WORKSPACE}/${dir}.zip"
+
+        # Unzip it
         unzip "${dir}.zip"
 
+        # Copy the build.sh file into the downloaded directory
         cp "$0" "${dir}"
-        cp -r "${source_root}/scripts" "${dir}"
+
+        # Copy the scripts into the downloaded directory
+        cp -r "${ROOT_WORKSPACE}/scripts" "${dir}"
+
+        # Copy dependencies.list
+        cp -r "${ROOT_WORKSPACE}/dependencies.list" "${dir}"
+
         cd "${dir}"
+        # Test Examples 
         sh build.sh examples-ios
         sh build.sh examples-tvos
         sh build.sh examples-osx
         sh build.sh examples-ios-swift
         sh build.sh examples-tvos-swift
-        cd ..
-        rm -rf "${dir}"
         ;;
 
-    "package")
-        PLATFORM="$2"
-        sh build.sh "$PLATFORM-swift"
-        if [[ "$PLATFORM" == ios ]]; then
-            sh build.sh "$PLATFORM-static"
-        else
-            mkdir -p Static
+    ("release_test-ios")
+        echo "Test run on test action"
+        ;;
+    
+    ("release_test-osx")
+        echo "Test run on test action"
+        ;;
+
+    (release_test-installation-*)
+        XCODE_VERSION="$2"
+        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${ROOT_WORKSPACE}/dependencies.list")"
+        target=(${COMMAND//-/ })
+        platform="${target[2]}"
+        installation="${target[3]}"
+
+        if [[ $installation == "xcframework" ]]; then
+            # Download package to be used on test
+            package_file_name=realm-swift-${VERSION}.zip
+            ./scripts/github_prepare.rb --download-asset "${package_file_name}" --path "${ROOT_WORKSPACE}/examples/installation/${package_file_name}"
+            unzip "examples/installation/${package_file_name}"
         fi
 
-        cd build
-        zip --symlinks -r "realm-$PLATFORM-$REALM_XCODE_VERSION.zip" "Release/$PLATFORM" "Static/$PLATFORM"
+        cd examples/installation
+
+        # When the target finish in static $LINKAGE variable changes to static
+        echo "Testing installation ${installation} method in ${platform} for ${LINKAGE}"
+        REALM_TEST_BRANCH="$BRANCH" ./build.rb "${platform}" "${installation}" "${LINKAGE}"
         ;;
 
-    "package-release")
-        version="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${source_root}/dependencies.list")"
-        find . -name 'realm-*-1*.zip' -maxdepth 1 \
-            | sed 's@./realm-[a-z]*-\(.*\).zip@\1@' \
-            | sort -u --version-sort \
-            | xargs ./scripts/create-release-package.rb "${WORKSPACE}/pkg" "${version}"
-        ;;
+    ######################################
+    # Publish
+    ######################################
 
     "test-package-release")
         # Generate a release package locally for testing purposes
@@ -1181,18 +1266,48 @@ case "$COMMAND" in
         ;;
 
     "publish-github")
-        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${source_root}/dependencies.list")"
-        ./scripts/github_release.rb "$VERSION"
+        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${GITHUB_WORKSPACE}/dependencies.list")"
+        XCODE_VERSIONS=$(./scripts/release-matrix.rb xcode_versions)
+        XCODE_VERSIONS_ARRAY=(${XCODE_VERSIONS//,/ })
+
+        # Create binary directory to store all the data to upload.
+        package_dir=release_pkg
+        mkdir -p "${package_dir}"
+
+        # Download realm-swift-${VERSION} package
+        package_file_name=realm-swift-${VERSION}.zip
+        ./scripts/github_prepare.rb --download-asset "${package_file_name}" --path "${GITHUB_WORKSPACE}/${package_dir}/${package_file_name}"
+
+        # Download SPM files for each xcode version, created in the prepare step.
+        for xcode_version in ${XCODE_VERSIONS_ARRAY[@]}; do
+            spm_file_name=RealmSwift@${xcode_version}.spm.zip
+            ./scripts/github_prepare.rb --download-asset "${spm_file_name}" --path "${GITHUB_WORKSPACE}/${package_dir}/${spm_file_name}"
+        done
+
+        # Download the Obj-C xcframework created in the prepare step.
+        realm_file_name=Realm.spm.zip
+        ./scripts/github_prepare.rb --download-asset "${realm_file_name}" --path "${GITHUB_WORKSPACE}/${package_dir}/${realm_file_name}"
+
+        # Download the Carthage xcframework
+        carthage_file_name=Carthage.xcframework.zip
+        ./scripts/github_prepare.rb --download-asset "${carthage_file_name}" --path "${GITHUB_WORKSPACE}/${package_dir}/${carthage_file_name}"
+
+        # Prepare version for
+        ./scripts/github_release.rb create-release "$VERSION"
         ;;
 
     "publish-docs")
-        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${source_root}/dependencies.list")"
+        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${GITHUB_WORKSPACE}/dependencies.list")"
         PRERELEASE_REGEX='alpha|beta|rc|preview'
         if [[ $VERSION =~ $PRERELEASE_REGEX ]]; then
           exit 0
         fi
-        rm -rf swift_output objc_output
+
+        # Download docs from the draft release
+        ./scripts/github_prepare.rb --download-asset "realm-docs.zip" --path "${GITHUB_WORKSPACE}/realm-docs.zip"
+
         unzip realm-docs.zip
+
         s3cmd put --recursive --acl-public --access_key=${AWS_ACCESS_KEY_ID} --secret_key=${AWS_SECRET_ACCESS_KEY} swift_output/ s3://realm-sdks/docs/realm-sdks/swift/${VERSION}/
         s3cmd put --recursive --acl-public --access_key=${AWS_ACCESS_KEY_ID} --secret_key=${AWS_SECRET_ACCESS_KEY} swift_output/ s3://realm-sdks/docs/realm-sdks/swift/latest/
 
@@ -1201,7 +1316,7 @@ case "$COMMAND" in
         ;;
 
     "publish-update-checker")
-        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${source_root}/dependencies.list")"
+        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${GITHUB_WORKSPACE}/dependencies.list")"
         PRERELEASE_REGEX='alpha|beta|rc|preview'
         if [[ $VERSION =~ $PRERELEASE_REGEX ]]; then
           exit 0
@@ -1209,26 +1324,31 @@ case "$COMMAND" in
 
         # update static.realm.io/update/cocoa
         printf "%s" "${VERSION}" > cocoa
-        s3cmd put cocoa s3://static.realm.io/update/
-        rm cocoa
-        ;;
-
-    "publish-tag")
-        git clone git@github.com:realm/realm-swift.git
-        cd realm-swift
-        git checkout "$2"
-        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' dependencies.list)"
-        git tag -m "Release ${VERSION}" "v${VERSION}"
-        git push origin "v${VERSION}"
+        s3cmd put --recursive --acl-public --access_key=${AWS_ACCESS_KEY_ID} --secret_key=${AWS_SECRET_ACCESS_KEY} cocoa s3://static.realm.io/update/
         ;;
 
     "publish-cocoapods")
-        git clone https://github.com/realm/realm-swift
-        cd realm-swift
-        git checkout "$2"
-        ./scripts/reset-simulators.rb
+        cd "${GITHUB_WORKSPACE}"
         pod trunk push Realm.podspec --verbose --allow-warnings
         pod trunk push RealmSwift.podspec --verbose --allow-warnings --synchronous
+        ;;
+
+    "prepare-publish-changelog")
+        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${GITHUB_WORKSPACE}/dependencies.list")"
+        ./scripts/github_release.rb package-release-notes "$VERSION"
+        ;;
+
+    (release_publish-test-installation-*)
+        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${ROOT_WORKSPACE}/dependencies.list")"
+        target=(${COMMAND//-/ })
+        platform="${target[3]}"
+        installation="${target[4]}"
+        
+        cd examples/installation
+
+        # When the target finish in static $LINKAGE variable changes to static
+        echo "Testing installation ${installation} method in ${platform} for ${LINKAGE}"
+        REALM_TEST_RELEASE="$VERSION" ./build.rb "${platform}" "${installation}" "${LINKAGE}"
         ;;
 
     "add-empty-changelog")

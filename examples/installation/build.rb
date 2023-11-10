@@ -81,7 +81,7 @@ end
 
 def download_release(version)
   # Download and extract the zip if the extracted directory doesn't already
-  # exist. For CI release testing, we already have a local copy of the zip that
+  # exist. For master-push workflow testing, we already downloaded a local copy of the zip that
   # just needs to be extracted.
   unless Dir.exist? "realm-swift-#{version}"
     unless File.exist? "realm-swift-#{version}.zip"
@@ -117,11 +117,6 @@ def download_realm(platform, method, static)
       ''
     end
     File.write 'Cartfile', 'github "realm/realm-swift"' + version
-
-    # Carthage requires that a simulator exist, but `xcodebuild -list` is
-    # sometimes very slow if too many simulators exist, so delete all but one
-    # per platform
-    sh '../../scripts/reset-simulators.rb', '-firstOnly'
 
     platformName = case platform
                    when 'ios' then 'iOS'

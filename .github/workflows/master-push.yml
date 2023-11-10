@@ -1,0 +1,227 @@
+name: Prepare Release
+on:
+  push:
+    branches:
+      - "master"
+jobs:
+  prepare:
+      runs-on: ubuntu-latest
+      name: Create Draft Release to store artifacts
+      steps:
+          - name: Checkout
+            uses: actions/checkout@v4
+          - name: Export GITHUB_TOKEN to workspace
+            run: echo "GITHUB_ACCESS_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
+          - name: Install ruby
+            uses: ruby/setup-ruby@ec02537da5712d66d4d50a0f33b7eb52773b5ed1
+            with:
+              ruby-version: '3.1.2'
+          - name: Install Gems
+            run: |
+              gem install octokit
+          - name: Create draft release to store artifacts.
+            run: ruby ./scripts/github_release.rb create-draft-release
+  build-docs:
+      runs-on: ubuntu-latest
+      name: Package docs and upload them to the draft release
+      needs: prepare
+      steps:
+          - name: Checkout
+            uses: actions/checkout@v4
+          - name: Get Token
+            id: token
+            uses: yuki0n0/action-appstoreconnect-token@v1.0
+            with:
+                # UUID. Can get from App Store Connect.
+                issuer id: ${{ secrets.APPLE_STORE_CONNECT_ISSUER_ID }}
+                # Key ID. Can get from App Store Connect.
+                key id: ${{ secrets.APPLE_STORE_CONNECT_KEY_ID }}
+                # P8 private key. Can get from App Store Connect.
+                key:  ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
+          - name: Run release_package-docs xcode cloud build and wait for it to finish, this xcode cloud upload realm-docs.zip assets to the artifacts draft release
+            run: |
+              XCODE_VERSION="$(ruby ./scripts/release-matrix.rb docs_version)"
+              ruby ./scripts/xcode_cloud_helper.rb --run-release-workflow "release_package-docs_${XCODE_VERSION}" --token ${{ steps.token.outputs.token }}
+  build-examples:
+      runs-on: macos-latest
+      name: Package examples and upload them to the draft release
+      needs: prepare
+      steps:
+          - name: Checkout
+            uses: actions/checkout@v4
+          - name: Export GITHUB_TOKEN to workspace
+            run: echo "GITHUB_ACCESS_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
+          - name: Install ruby
+            uses: ruby/setup-ruby@ec02537da5712d66d4d50a0f33b7eb52773b5ed1
+            with:
+              ruby-version: '3.1.2'
+          - name: Install Gems
+            run: |
+              gem install octokit
+              gem install xcodeproj
+          - name: Run release_package-examples package and uploads the example folder
+            run: ./build.sh release_package-examples
+  build-product:
+      runs-on: ubuntu-latest
+      name: Package product for each xcode version.
+      needs: build-examples
+      strategy:
+        matrix:
+          xcode-version: ['14.1', '14.2', '14.3.1', '15.0.1', '15.1']
+      steps:
+          - name: Checkout
+            uses: actions/checkout@v4
+          - name: Get Token
+            id: token
+            uses: yuki0n0/action-appstoreconnect-token@v1.0
+            with:
+                # UUID. Can get from App Store Connect.
+                issuer id: ${{ secrets.APPLE_STORE_CONNECT_ISSUER_ID }}
+                # Key ID. Can get from App Store Connect.
+                key id: ${{ secrets.APPLE_STORE_CONNECT_KEY_ID }}
+                # P8 private key. Can get from App Store Connect.
+                key:  ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
+          - name: Run release_package_${{ matrix.xcode-version }} which upload the package to the draft release and wait for it to complete or fail
+            run: ruby ./scripts/xcode_cloud_helper.rb --run-release-workflow "release_package_${{ matrix.xcode-version }}" --token ${{ steps.token.outputs.token }}
+  build-package:
+      runs-on: macos-latest
+      name: Package products for all xcode version into a single package.
+      needs: build-product
+      steps:
+          - name: Checkout
+            uses: actions/checkout@v4
+          - name: Export GITHUB_TOKEN to workspace
+            run: echo "GITHUB_ACCESS_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
+          - name: 
+            run: ./build.sh release-package-all
+  test-package-examples:
+      runs-on: ubuntu-latest
+      name: Test examples
+      needs: build-package
+      steps:
+          - name: Checkout
+            uses: actions/checkout@v4
+          - name: Get Token
+            id: token
+            uses: yuki0n0/action-appstoreconnect-token@v1.0
+            with:
+                # UUID. Can get from App Store Connect.
+                issuer id: ${{ secrets.APPLE_STORE_CONNECT_ISSUER_ID }}
+                # Key ID. Can get from App Store Connect.
+                key id: ${{ secrets.APPLE_STORE_CONNECT_KEY_ID }}
+                # P8 private key. Can get from App Store Connect.
+                key:  ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
+          - name: Run release_test-package-examples_15.1 which runs test over the packages produces by the previous step and wait for it to complete or fail
+            run: ruby ./scripts/xcode_cloud_helper.rb --run-release-workflow release_test-package-examples_15.1 --token ${{ steps.token.outputs.token }}
+  test-ios-static:
+      runs-on: ubuntu-latest
+      name: Run tests on iOS with configuration Static
+      needs: build-package
+      steps:
+          - name: Checkout
+            uses: actions/checkout@v4
+          - name: Get Token
+            id: token
+            uses: yuki0n0/action-appstoreconnect-token@v1.0
+            with:
+                # UUID. Can get from App Store Connect.
+                issuer id: ${{ secrets.APPLE_STORE_CONNECT_ISSUER_ID }}
+                # Key ID. Can get from App Store Connect.
+                key id: ${{ secrets.APPLE_STORE_CONNECT_KEY_ID }}
+                # P8 private key. Can get from App Store Connect.
+                key:  ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
+          - name: Run release_ios-static_15.1 which runs test over the packages produces by the previous step and wait for it to complete or fail
+            run: ruby ./scripts/xcode_cloud_helper.rb --run-release-workflow release_test-ios-static_15.1 --token ${{ steps.token.outputs.token }}
+  test-osx-static:
+      runs-on: ubuntu-latest
+      name: Run tests on macOS
+      needs: build-package
+      steps:
+          - name: Checkout
+            uses: actions/checkout@v4
+          - name: Get Token
+            id: token
+            uses: yuki0n0/action-appstoreconnect-token@v1.0
+            with:
+                # UUID. Can get from App Store Connect.
+                issuer id: ${{ secrets.APPLE_STORE_CONNECT_ISSUER_ID }}
+                # Key ID. Can get from App Store Connect.
+                key id: ${{ secrets.APPLE_STORE_CONNECT_KEY_ID }}
+                # P8 private key. Can get from App Store Connect.
+                key:  ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
+          - name: Run release_osx_15.1 which runs test over the packages produces by the previous step and wait for it to complete or fail
+            run: ruby ./scripts/xcode_cloud_helper.rb --run-release-workflow release_test-osx_15.1 --token ${{ steps.token.outputs.token }}
+  test-installation:
+      runs-on: ubuntu-latest
+      name: Run installation test for ${{ matrix.platform }}, ${{ matrix.installation }} and ${{ matrix.linkage }}
+      needs: build-package
+      env:
+        XCODE_VERSION: '14.3.1'
+      strategy:
+        matrix:
+          platform: [ios, osx, watchos, tvos, catalyst]
+          installation: [cocoapods, spm, carthage]
+          linkage: [static, dynamic]
+          exclude:
+            - platform: catalyst
+              installation: carthage
+            - installation: carthage
+              linkage: static
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+        - name: Get Token
+          id: token
+          uses: yuki0n0/action-appstoreconnect-token@v1.0
+          with:
+            # UUID. Can get from App Store Connect.
+            issuer id: ${{ secrets.APPLE_STORE_CONNECT_ISSUER_ID }}
+            # Key ID. Can get from App Store Connect.
+            key id: ${{ secrets.APPLE_STORE_CONNECT_KEY_ID }}
+            # P8 private key. Can get from App Store Connect.
+            key:  ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
+        - name: Creates an XCode Cloud workflow to run the test and runs build
+          run: |
+            ruby ./scripts/xcode_cloud_helper.rb --create-release-workflow-and-run test-installation-${{ matrix.platform }}-${{ matrix.installation }}-${{ matrix.linkage }} --xcode-version "$XCODE_VERSION" --token ${{ steps.token.outputs.token }} --team-id ${{ secrets.APPLE_STORE_CONNECT_TEAM_ID }}
+  test-installation-xcode: # we run this installation tests separatly because we need xcode cloud workflows previsously created with a GITHUB token so we can download the release package for this tests
+      runs-on: ubuntu-latest
+      name: Run installation xcframework ${{ matrix.platform }}, ${{ matrix.linkage }} in ${{ matrix.xcode_version }} 
+      needs: build-package
+      strategy:
+        max-parallel: 5
+        matrix:
+          platform: [osx]
+          xcode_version: ['14.1', '14.2', '14.3.1', '15.0.1', '15.1']
+          linkage: [dynamic]
+          include:
+            - platform: ios
+              xcode_version: '14.3.1'
+              linkage: dynamic
+            - platform: watchos
+              xcode_version: '14.3.1'
+              linkage: dynamic
+            - platform: tvos
+              xcode_version: '14.3.1'
+              linkage: dynamic
+            - platform: catalyst
+              xcode_version: '14.3.1'
+              linkage: dynamic
+            - platform: ios
+              installation: '14.3.1'
+              linkage: static
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+        - name: Get Token
+          id: token
+          uses: yuki0n0/action-appstoreconnect-token@v1.0
+          with:
+              # UUID. Can get from App Store Connect.
+              issuer id: ${{ secrets.APPLE_STORE_CONNECT_ISSUER_ID }}
+              # Key ID. Can get from App Store Connect.
+              key id: ${{ secrets.APPLE_STORE_CONNECT_KEY_ID }}
+              # P8 private key. Can get from App Store Connect.
+              key:  ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
+        - name: Run installation tests for ${{ matrix.platform }} xcframework ${{ matrix.linkage }} in xcode version ${{ matrix.xcode-version }}
+          run: |
+            ruby ./scripts/xcode_cloud_helper.rb --run-release-workflow "release_test-installation-${{ matrix.platform }}-xcframework-${{ matrix.linkage }}_${{ matrix.xcode-version }}" --token ${{ steps.token.outputs.token }}

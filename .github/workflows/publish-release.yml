@@ -1,0 +1,160 @@
+name: Publish release
+on: workflow_dispatch
+jobs:
+  tag-release:
+      runs-on: ubuntu-latest
+      name: Tag Release
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+        - name: Read SDK version
+          id: get-version
+          run: |
+            version="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${GITHUB_WORKSPACE}/dependencies.list")"
+            echo "-----> ${version}"
+            echo "version=$version" >> $GITHUB_OUTPUT
+        - uses: rickstaa/action-create-tag@v1
+          id: "tag_create"
+          with:
+            tag: "v${{ steps.get-version.outputs.version }}"
+            tag_exists_error: false
+            message: ""
+  publish-docs:
+      runs-on: macos-latest
+      name: Publish docs to S3 Bucket
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+        - name: Export AWS Secrets to workspace
+          run: | 
+            echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
+            echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
+        - name: Download docs and upload them to S3
+          run: |
+              ./build.sh publish-docs
+  create-release:
+      runs-on: macos-latest
+      name: Create github release
+      needs: tag-release
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+        - name: Export GITHUB_TOKEN to workspace
+          run: echo "GITHUB_ACCESS_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
+        - name: Install ruby
+          uses: ruby/setup-ruby@ec02537da5712d66d4d50a0f33b7eb52773b5ed1
+          with:
+            ruby-version: '3.1.2'
+        - name: Install Gems
+          run: |
+            gem install octokit
+        - name: Create Github release
+          run: ./build.sh publish-github
+  publish-cocoapods:
+      runs-on: macos-latest
+      name: Publish Cocoapods specs
+      needs: tag-release
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+        - name: Read SDK version
+          id: get-version
+          run: |
+            version="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${GITHUB_WORKSPACE}/dependencies.list")"
+            echo "version=$version" >> $GITHUB_OUTPUT
+        - name: Export COCOAPODS_TRUNK_TOKEN to workspace
+          run: echo "COCOAPODS_TRUNK_TOKEN=${{ secrets.COCOAPODS_TRUNK_TOKEN }}" >> $GITHUB_ENV
+        - name: Publish 
+          run: ./build.sh publish-cocoapods v${{ steps.get-version.outputs.version }}
+  update-checker:
+      runs-on: macos-latest
+      name: Update to latest version update checker file
+      needs: tag-release
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+        - name: Export AWS Secrets to workspace
+          run: | 
+            echo "AWS_ACCESS_KEY_ID=${{ secrets.UPDATE_CHECKER_ACCESS_KEY }}" >> $GITHUB_ENV
+            echo "AWS_SECRET_ACCESS_KEY=${{ secrets.UPDATE_CHECKER_SECRET_KEY }}" >> $GITHUB_ENV
+        - name: Create Github release
+          run: ./build.sh publish-update-checker
+  test-installation:
+      runs-on: ubuntu-latest
+      name: Run installation test for ${{ matrix.platform }}, ${{ matrix.installation }} and ${{ matrix.linkage }}
+      needs: update-checker
+      env:
+        XCODE_VERSION: '15.1'
+      strategy:
+        max-parallel: 5
+        matrix:
+          platform: [ios, osx, watchos, tvos, catalyst, visionos]
+          installation: [cocoapods, spm, carthage, xcframework]
+          linkage: [static, dynamic]
+          exclude:
+            - installation: carthage
+              linkage: static
+            - platform: osx
+              installation: xcframework
+              linkage: static
+            - platform: watchos
+              installation: xcframework
+              linkage: static
+            - platform: tvos
+              installation: xcframework
+              linkage: static
+            - platform: catalyst
+              installation: xcframework
+              linkage: static
+            - platform: visionos
+              installation: xcframework
+              linkage: static
+            - platform: catalyst
+              installation: carthage
+              linkage: static
+            - platform: visionos
+              installation: carthage
+            - platform: visionos
+              installation: cocoapods
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+        - name: Get Token
+          id: token
+          uses: yuki0n0/action-appstoreconnect-token@v1.0
+          with:
+            # UUID. Can get from App Store Connect.
+            issuer id: ${{ secrets.APPLE_STORE_CONNECT_ISSUER_ID }}
+            # Key ID. Can get from App Store Connect.
+            key id: ${{ secrets.APPLE_STORE_CONNECT_KEY_ID }}
+            # P8 private key. Can get from App Store Connect.
+            key:  ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
+        - name: Read SDK version
+          id: get-version
+          run: |
+            version="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${GITHUB_WORKSPACE}/dependencies.list")"
+            echo "version=$version" >> $GITHUB_OUTPUT
+        - name: Creates an XCode Cloud workflow to run the test and runs build
+          run: |
+            ruby ./scripts/xcode_cloud_helper.rb --create-release-workflow-and-run publish-test-installation-${{ matrix.platform }}-${{ matrix.installation }}-${{ matrix.linkage }} --xcode-version "$XCODE_VERSION" --token ${{ steps.token.outputs.token }} --team-id ${{ secrets.APPLE_STORE_CONNECT_TEAM_ID }}
+  post-slack-release:
+      runs-on: macos-latest
+      name: Publish to release Slack channel
+      needs: test-installation
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+        - name: Prepare Changelog
+          run: ./build.sh prepare-publish-changelog
+        - name: Read SDK version
+          id: get-version
+          run: |
+            version="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${GITHUB_WORKSPACE}/dependencies.list")"
+            echo "version=$version" >> $GITHUB_OUTPUT
+        - name: 'Post to #realm-releases'
+          uses: realm/ci-actions/release-to-slack@v3
+          with:
+            changelog: ExtractedChangelog/CHANGELOG.md
+            sdk: Swift
+            webhook-url: ${{ secrets.SLACK_RELEASE_WEBHOOK }}
+            version: ${{ steps.get-version.outputs.version }}
