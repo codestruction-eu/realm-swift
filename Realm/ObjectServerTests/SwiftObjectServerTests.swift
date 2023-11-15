@@ -479,6 +479,7 @@ class SwiftObjectServerTests: SwiftSyncTestCase {
         let app = app(withId: appId)
         let user = try logInUser(for: basicCredentials(app: app), app: app)
         let collection = try setupMongoCollection(user: user, for: SwiftPerson.self)
+        try RealmServer.shared.waitForSync(appId: appId)
 
         if disableRecoveryMode {
             // Disable recovery mode on the server.
@@ -511,9 +512,6 @@ class SwiftObjectServerTests: SwiftSyncTestCase {
             XCTAssertEqual(realm.objects(SwiftPerson.self).count, 1)
         }
 
-        // Object created above should not have been synced
-        XCTAssertEqual(collection.count(filter: [:]).await(self), 0)
-
         autoreleasepool {
             var config = user.flexibleSyncConfiguration { subscriptions in
                 subscriptions.append(QuerySubscription<SwiftPerson>(name: "all_people"))
@@ -522,6 +520,9 @@ class SwiftObjectServerTests: SwiftSyncTestCase {
             config.objectTypes = [SwiftPerson.self]
             waitForServerHistoryAfterRestart(config: config, collection: collection)
         }
+
+        // Object created above should not have been synced
+        XCTAssertEqual(collection.count(filter: [:]).await(self), 0)
 
         return (user, appId)
     }
@@ -3510,7 +3511,7 @@ class AsyncAwaitObjectServerTests: SwiftSyncTestCase {
                 realm.add(SwiftPerson(firstName: "Paul", lastName: "McCartney"))
                 realm.add(SwiftTypesSyncObject(person: SwiftPerson(firstName: "George", lastName: "Harrison")))
             }
-            try await realm.syncSession?.wait(for: .upload)
+            try await XCTUnwrap(realm.syncSession).wait(for: .upload)
             checkCount(expected: 4, realm, SwiftPerson.self)
             checkCount(expected: 1, realm, SwiftTypesSyncObject.self)
         }

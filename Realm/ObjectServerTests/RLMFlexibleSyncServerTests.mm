@@ -1167,7 +1167,9 @@
     CHECK_COUNT(0, Person, realm);
 
     XCTestExpectation *ex = [self expectationWithDescription:@"wait for download"];
-    [[[Person allObjectsInRealm:realm] objectsWhere:@"lastName == 'Doe'"] subscribeWithName:@"unknown" onQueue:dispatch_get_main_queue() completion:^(RLMResults *results, NSError *error) {
+    [[[Person allObjectsInRealm:realm] objectsWhere:@"lastName == 'Doe' AND partition == 'testUnsubscribeWithinBlock'"]
+     subscribeWithName:@"unknown" onQueue:dispatch_get_main_queue()
+     completion:^(RLMResults *results, NSError *error) {
         XCTAssertNil(error);
         XCTAssertEqual(results.count, 1U);
         [results unsubscribe];

@@ -1001,6 +1001,9 @@ public class RealmServer: NSObject {
             throw URLError(.timedOut)
         }
 
+        // Wait for initial sync to complete as connecting before that has a lot of problems
+        try waitForSync(appServerId: appId, expectedCount: syncTypes.count - asymmetricTables.count)
+
         return clientAppId
     }
 
@@ -1219,6 +1222,30 @@ public class RealmServer: NSObject {
         let appServerId = try retrieveAppServerId(appId)
         let ident = RLMGetClientFileIdent(ObjectiveCSupport.convert(object: realm))
         _ = try session.privateApps[appServerId].sync.forceReset.put(["file_ident": ident]).get()
+    }
+
+    public func waitForSync(appId: String) throws {
+        try waitForSync(appServerId: retrieveAppServerId(appId), expectedCount: 1)
+    }
+
+    public func waitForSync(appServerId: String, expectedCount: Int) throws {
+        let session = try XCTUnwrap(session)
+        while true {
+            let complete = try session.apps[appServerId].sync.progress.get()
+                .map { resp in
+                    guard let resp = resp as? Dictionary<String, Any?> else { return false }
+                    guard let progress = resp["progress"] else { return false }
+                    guard let progress = progress as? Dictionary<String, Any?> else { return false }
+                    let values = progress.compactMapValues { $0 as? Dictionary<String, Any?> }
+                    let complete = values.allSatisfy { $0.value["complete"] as? Bool ?? false }
+                    return complete && progress.count >= expectedCount
+                }
+                .get()
+            if complete {
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
     }
 }
 
