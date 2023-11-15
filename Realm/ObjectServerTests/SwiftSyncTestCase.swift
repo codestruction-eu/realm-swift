@@ -28,18 +28,6 @@ import RealmSyncTestSupport
 import RealmSwiftTestSupport
 #endif
 
-public extension User {
-    func configuration<T: BSON>(testName: T) -> Realm.Configuration {
-        var config = self.configuration(partitionValue: testName)
-        config.objectTypes = [SwiftPerson.self, SwiftHugeSyncObject.self, SwiftTypesSyncObject.self, SwiftCustomColumnObject.self]
-        return config
-    }
-
-    func collection(for object: ObjectBase.Type) -> MongoCollection {
-        mongoClient("mongodb1").database(named: "test_data").collection(withName: object.className())
-    }
-}
-
 public func randomString(_ length: Int) -> String {
     let letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     return String((0..<length).map { _ in letters.randomElement()! })
@@ -60,9 +48,14 @@ public enum ProcessKind {
     }
 }
 
-@available(macOS 10.15, *)
+@available(macOS 13, *)
 @MainActor
 open class SwiftSyncTestCase: RLMSyncTestCase {
+    // overridden in subclasses to generate a FLX config instead of a PBS one
+    open func configuration(user: User) -> Realm.Configuration {
+        user.configuration(partitionValue: self.name)
+    }
+
     public func executeChild(file: StaticString = #file, line: UInt = #line) {
         XCTAssert(0 == runChildAndWait(), "Tests in child process failed", file: file, line: line)
     }
@@ -76,56 +69,37 @@ open class SwiftSyncTestCase: RLMSyncTestCase {
             XCTAssertNil(error)
             ex.fulfill()
         })
-        waitForExpectations(timeout: 40, handler: nil)
+        wait(for: [ex], timeout: 4)
         return credentials
     }
 
-    public func openRealm(partitionValue: AnyBSON, user: User) throws -> Realm {
-        let config = user.configuration(partitionValue: partitionValue)
-        return try openRealm(configuration: config)
+    public func openRealm(app: App? = nil, wait: Bool = true) throws -> Realm {
+        let realm = try Realm(configuration: configuration(app: app))
+        if wait {
+            waitForDownloads(for: realm)
+        }
+        return realm
     }
 
-    public func openRealm<T: BSON>(partitionValue: T,
-                                   user: User,
-                                   clientResetMode: ClientResetMode? = .recoverUnsyncedChanges(),
-                                   file: StaticString = #file,
-                                   line: UInt = #line) throws -> Realm {
-        let config: Realm.Configuration
-        if clientResetMode != nil {
-            config = user.configuration(partitionValue: partitionValue, clientResetMode: clientResetMode!)
-        } else {
-            config = user.configuration(partitionValue: partitionValue)
-        }
-        return try openRealm(configuration: config)
+    public func configuration(app: App? = nil) throws -> Realm.Configuration {
+        let user = try createUser(app: app)
+        var config = configuration(user: user)
+        config.objectTypes = (self.defaultObjectTypes() as! [ObjectBase.Type])
+        return config
     }
 
     public func openRealm(configuration: Realm.Configuration) throws -> Realm {
-        var configuration = configuration
-        if configuration.objectTypes == nil {
-            configuration.objectTypes = [SwiftPerson.self,
-                                         SwiftHugeSyncObject.self,
-                                         SwiftCollectionSyncObject.self,
-                                         SwiftUUIDPrimaryKeyObject.self,
-                                         SwiftStringPrimaryKeyObject.self,
-                                         SwiftIntPrimaryKeyObject.self,
-                                         SwiftTypesSyncObject.self]
-        }
         let realm = try Realm(configuration: configuration)
         waitForDownloads(for: realm)
         return realm
     }
 
-    public func immediatelyOpenRealm(partitionValue: String, user: User) throws -> Realm {
-        var configuration = user.configuration(partitionValue: partitionValue)
-        if configuration.objectTypes == nil {
-            configuration.objectTypes = [SwiftPerson.self,
-                                         SwiftHugeSyncObject.self,
-                                         SwiftTypesSyncObject.self]
-        }
-        return try Realm(configuration: configuration)
+    public func createUser(app: App? = nil) throws -> User {
+        let app = app ?? self.app
+        return try logInUser(for: basicCredentials(app: app), app: app)
     }
 
-    open func logInUser(for credentials: Credentials, app: App? = nil) throws -> User {
+    public func logInUser(for credentials: Credentials, app: App? = nil) throws -> User {
         let user = (app ?? self.app).login(credentials: credentials).await(self, timeout: 60.0)
         XCTAssertTrue(user.isLoggedIn)
         return user
@@ -139,6 +113,22 @@ open class SwiftSyncTestCase: RLMSyncTestCase {
         waitForDownloads(for: ObjectiveCSupport.convert(object: realm))
     }
 
+    public func write(app: App? = nil, _ block: (Realm) throws -> Void) throws {
+        try autoreleasepool {
+            let realm = try openRealm(app: app)
+            RLMRealmSubscribeToAll(ObjectiveCSupport.convert(object: realm))
+
+            try realm.write {
+                try block(realm)
+            }
+            waitForUploads(for: realm)
+
+            let syncSession = try XCTUnwrap(realm.syncSession)
+            syncSession.suspend()
+            syncSession.parentUser()?.remove().await(self)
+        }
+    }
+
     public func checkCount<T: Object>(expected: Int,
                                       _ realm: Realm,
                                       _ type: T.Type,
@@ -148,8 +138,8 @@ open class SwiftSyncTestCase: RLMSyncTestCase {
         let actual = realm.objects(type).count
         XCTAssertEqual(actual, expected,
                        "Error: expected \(expected) items, but got \(actual) (process: \(isParent ? "parent" : "child"))",
-            file: file,
-            line: line)
+                       file: file,
+                       line: line)
     }
 
     var exceptionThrown = false
@@ -175,10 +165,8 @@ open class SwiftSyncTestCase: RLMSyncTestCase {
     public static let bigObjectCount = 2
     public func populateRealm<T: BSON>(user: User? = nil, partitionValue: T) throws {
         try autoreleasepool {
-            let user = try (user ?? logInUser(for: basicCredentials()))
-            let config = user.configuration(testName: partitionValue)
-
-            let realm = try openRealm(configuration: config)
+            let config = configuration(user: user ?? createUser())
+            let realm = try Realm(configuration: config)
             try realm.write {
                 for _ in 0..<SwiftSyncTestCase.bigObjectCount {
                     realm.add(SwiftHugeSyncObject.create())
@@ -189,77 +177,18 @@ open class SwiftSyncTestCase: RLMSyncTestCase {
         }
     }
 
-    // MARK: - Flexible Sync Use Cases
-
-    public func openFlexibleSyncRealmForUser(_ user: User) throws -> Realm {
-        var config = user.flexibleSyncConfiguration()
-        if config.objectTypes == nil {
-            config.objectTypes = [SwiftPerson.self,
-                                  SwiftTypesSyncObject.self]
-        }
-        let realm = try Realm(configuration: config)
-        waitForDownloads(for: realm)
-        return realm
-    }
-
-    public func openFlexibleSyncRealm() throws -> Realm {
-        let user = try logInUser(for: basicCredentials(app: self.flexibleSyncApp), app: self.flexibleSyncApp)
-        var config = user.flexibleSyncConfiguration()
-        if config.objectTypes == nil {
-            config.objectTypes = [SwiftPerson.self,
-                                  SwiftTypesSyncObject.self]
-        }
-        return try Realm(configuration: config)
-    }
-
-    public func flexibleSyncRealm() throws -> Realm {
-        let user = try logInUser(for: basicCredentials(app: self.flexibleSyncApp), app: self.flexibleSyncApp)
-        return try openFlexibleSyncRealmForUser(user)
-    }
-
-    public func populateFlexibleSyncData(_ block: @escaping (Realm) -> Void) throws {
-        try writeToFlxRealm { realm in
-            try realm.write {
-                block(realm)
+    public func populateRealm() throws {
+        try write { realm in
+            for _ in 0..<SwiftSyncTestCase.bigObjectCount {
+                realm.add(SwiftHugeSyncObject.create())
             }
-            self.waitForUploads(for: realm)
         }
-    }
-
-    public func updateAllPeopleSubscription(_ subscriptions: SyncSubscriptionSet) {
-        let expectation = expectation(description: "register subscription")
-        subscriptions.update {
-            subscriptions.append(QuerySubscription<SwiftPerson>(name: "all_people"))
-        } onComplete: { error in
-            XCTAssertNil(error)
-            expectation.fulfill()
-        }
-        wait(for: [expectation], timeout: 15.0)
-    }
-
-    public func writeToFlxRealm(_ block: @escaping (Realm) throws -> Void) throws {
-        let realm = try flexibleSyncRealm()
-        let subscriptions = realm.subscriptions
-        XCTAssertNotNil(subscriptions)
-        let ex = expectation(description: "state change complete")
-        subscriptions.update({
-            subscriptions.append(QuerySubscription<SwiftPerson>())
-            subscriptions.append(QuerySubscription<SwiftTypesSyncObject>())
-        }, onComplete: { error in
-            XCTAssertNil(error)
-            ex.fulfill()
-        })
-        XCTAssertEqual(subscriptions.count, 2)
-
-        waitForExpectations(timeout: 20.0, handler: nil)
-        try block(realm)
     }
 
     // MARK: - Mongo Client
 
-    public func setupMongoCollection(user: User? = nil, for type: ObjectBase.Type) throws -> MongoCollection {
-        let u = try user ?? logInUser(for: basicCredentials())
-        let collection = u.collection(for: type)
+    public func setupMongoCollection(for type: ObjectBase.Type) throws -> MongoCollection {
+        let collection = anonymousUser.collection(for: type, app: app)
         removeAllFromCollection(collection)
         return collection
     }
@@ -277,15 +206,13 @@ open class SwiftSyncTestCase: RLMSyncTestCase {
 
     public func waitForCollectionCount(_ collection: MongoCollection, _ count: Int) {
         let waitStart = Date()
-        while collection.count(filter: [:]).await(self) != count && waitStart.timeIntervalSinceNow > -600.0 {
+        while collection.count(filter: [:]).await(self) < count && waitStart.timeIntervalSinceNow > -600.0 {
             sleep(1)
         }
         XCTAssertEqual(collection.count(filter: [:]).await(self), count)
     }
-}
 
-@available(macOS 12.0, *)
-extension SwiftSyncTestCase {
+    // MARK: - Async helpers
     public func basicCredentials(usernameSuffix: String = "", app: App? = nil) async throws -> Credentials {
         let email = "\(randomString(10))\(usernameSuffix)"
         let password = "abcdef"
@@ -294,22 +221,28 @@ extension SwiftSyncTestCase {
         return credentials
     }
 
-    // MARK: - Flexible Sync Async Use Cases
-
-    public func flexibleSyncConfig() async throws -> Realm.Configuration {
-        var config = (try await self.flexibleSyncApp.login(credentials: basicCredentials(app: flexibleSyncApp))).flexibleSyncConfiguration()
-        if config.objectTypes == nil {
-            config.objectTypes = [SwiftPerson.self,
-                                  SwiftTypesSyncObject.self,
-                                  SwiftCustomColumnObject.self]
-        }
-        return config
+    @MainActor
+    @nonobjc public func openRealm(downloadBeforeOpen: Realm.OpenBehavior = .always) async throws -> Realm {
+        try await Realm(configuration: configuration(), downloadBeforeOpen: downloadBeforeOpen)
     }
 
     @MainActor
-    public func flexibleSyncRealm() async throws -> Realm {
-        let realm = try await Realm(configuration: flexibleSyncConfig())
-        return realm
+    public func write(_ block: @escaping (Realm) throws -> Void) async throws {
+        try await Task {
+            let realm = try await openRealm()
+            try await realm.asyncWrite {
+                try block(realm)
+            }
+            let syncSession = try XCTUnwrap(realm.syncSession)
+            try await syncSession.wait(for: .upload)
+            syncSession.suspend()
+            try await syncSession.parentUser()?.remove()
+        }.value
+    }
+
+    public func createUser(app: App? = nil) async throws -> User {
+        let credentials = try await basicCredentials(app: app)
+        return try await (app ?? self.app).login(credentials: credentials)
     }
 }
 

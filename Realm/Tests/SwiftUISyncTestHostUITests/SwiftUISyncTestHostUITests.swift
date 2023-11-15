@@ -20,7 +20,6 @@ import XCTest
 import RealmSwift
 
 class SwiftUISyncTestHostUITests: SwiftSyncTestCase {
-
     override func tearDown() {
         logoutAllUsers()
         application.terminate()
@@ -30,6 +29,10 @@ class SwiftUISyncTestHostUITests: SwiftSyncTestCase {
     override func setUp() {
         super.setUp()
         application.launchEnvironment["app_id"] = appId
+    }
+
+    override func defaultObjectTypes() -> [AnyClass] {
+        [SwiftPerson.self]
     }
 
     // Application

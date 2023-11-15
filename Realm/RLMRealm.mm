@@ -1149,4 +1149,20 @@ bool copySeedFile(RLMRealmConfiguration *configuration, NSError **error) {
     @throw RLMException(@"Realm was not compiled with sync enabled");
 #endif
 }
+
+void RLMRealmSubscribeToAll(RLMRealm *realm) {
+    if (!realm.isFlexibleSync) {
+        return;
+    }
+
+    auto subs = realm->_realm->get_latest_subscription_set().make_mutable_copy();
+    auto& group = realm->_realm->read_group();
+    for (auto key : group.get_table_keys()) {
+        if (!std::string_view(group.get_table_name(key)).starts_with("class_")) {
+            continue;
+        }
+        subs.insert_or_assign(group.get_table(key)->where());
+    }
+    subs.commit();
+}
 @end

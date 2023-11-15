@@ -66,10 +66,8 @@ class SwiftEventTests: SwiftSyncTestCase {
     var start: Date!
 
     override func setUp() {
-        user = try! logInUser(for: basicCredentials())
-        let mongoClient = user.mongoClient("mongodb1")
-        let database = mongoClient.database(named: "test_data")
-        collection = database.collection(withName: "AuditEvent")
+        user = createUser()
+        collection = user.collection(for: AuditEvent.self, app: app)
         _ = collection.deleteManyDocuments(filter: [:]).await(self)
 
         // The server truncates date values to lower precision than we support,
@@ -78,7 +76,7 @@ class SwiftEventTests: SwiftSyncTestCase {
     }
 
     override func tearDown() {
-        if let user = self.user {
+        if let user {
             while user.allSessions.count > 0 {
                 RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
             }
@@ -87,20 +85,14 @@ class SwiftEventTests: SwiftSyncTestCase {
         super.tearDown()
     }
 
-    func config(partition: String = UUID().uuidString) -> Realm.Configuration {
-        var config = user.configuration(partitionValue: partition)
+    override func configuration(user: User) -> Realm.Configuration {
+        var config = user.configuration(partitionValue: name)
         config.eventConfiguration = EventConfiguration()
-        config.objectTypes = [SwiftPerson.self, SwiftCustomEventRepresentation.self]
         return config
     }
 
-    func openRealm(_ configuration: Realm.Configuration? = nil) throws -> Realm {
-        let realm = try openRealm(configuration: configuration ?? self.config())
-        // For some reason the server deletes and recreates our objects, which
-        // breaks our accessor objects. Work around this by just not syncing the
-        // main Realm after opening it.
-        realm.syncSession?.pause()
-        return realm
+    override func defaultObjectTypes() -> [AnyClass] {
+        [AuditEvent.self, SwiftPerson.self, SwiftCustomEventRepresentation.self, LinkToSwiftPerson.self]
     }
 
     func scope<T>(_ events: Events, _ name: String, body: () throws -> T) rethrows -> T {
@@ -113,10 +105,8 @@ class SwiftEventTests: SwiftSyncTestCase {
     }
 
     func getEvents(expectedCount: Int) -> [AuditEvent] {
-        let waitStart = Date()
-        while collection.count(filter: [:]).await(self) < expectedCount && waitStart.timeIntervalSinceNow > -600.0 {
-            sleep(5)
-        }
+        waitForCollectionCount(collection, expectedCount)
+
         let docs = collection.find(filter: [:]).await(self)
         XCTAssertEqual(docs.count, expectedCount)
         return docs.map { doc in
@@ -219,7 +209,7 @@ class SwiftEventTests: SwiftSyncTestCase {
     }
 
     func testBasicWithAsyncOpen() throws {
-        let realm = Realm.asyncOpen(configuration: self.config()).await(self)
+        let realm = Realm.asyncOpen(configuration: try configuration()).await(self)
         let events = try XCTUnwrap(realm.events)
 
         let personJson: NSDictionary = try scope(events, "create object") {
@@ -267,9 +257,7 @@ class SwiftEventTests: SwiftSyncTestCase {
     }
 
     func testReadEvents() throws {
-        var config = self.config()
-        config.objectTypes = [SwiftPerson.self, LinkToSwiftPerson.self]
-        let realm = try openRealm(config)
+        let realm = try openRealm()
         let events = realm.events!
 
         let a = SwiftPerson(firstName: "A", lastName: "B")
@@ -339,9 +327,7 @@ class SwiftEventTests: SwiftSyncTestCase {
     }
 
     func testLinkTracking() throws {
-        var config = self.config()
-        config.objectTypes = [SwiftPerson.self, LinkToSwiftPerson.self]
-        let realm = try openRealm(config)
+        let realm = try openRealm()
         let events = realm.events!
 
         let a = SwiftPerson(firstName: "A", lastName: "B")
@@ -445,7 +431,7 @@ class SwiftEventTests: SwiftSyncTestCase {
     }
 
     func testMetadata() throws {
-        let realm = try Realm(configuration: self.config())
+        let realm = try openRealm()
         let events = realm.events!
 
         func writeEvent(_ name: String) throws {
@@ -474,7 +460,7 @@ class SwiftEventTests: SwiftSyncTestCase {
     func testCustomLogger() throws {
         let ex = expectation(description: "saw message with scope name")
         ex.assertForOverFulfill = false
-        var config = self.config()
+        var config = try configuration()
         config.eventConfiguration!.logger = { _, message in
             // Mostly just verify that the user-provided logger is wired up
             // correctly and not that the log messages are sensible
@@ -489,7 +475,7 @@ class SwiftEventTests: SwiftSyncTestCase {
     }
 
     func testCustomEvent() throws {
-        let realm = try Realm(configuration: self.config())
+        let realm = try openRealm()
         let events = realm.events!
 
         events.recordEvent(activity: "no event or data")
@@ -547,7 +533,7 @@ class SwiftEventTests: SwiftSyncTestCase {
     }
 
     func testErrorHandler() throws {
-        var config = self.config()
+        var config = try configuration()
         let blockCalled = Locked(false)
         let ex = expectation(description: "Error callback called")
         config.eventConfiguration?.errorHandler = { error in
@@ -555,7 +541,8 @@ class SwiftEventTests: SwiftSyncTestCase {
             blockCalled.value = true
             ex.fulfill()
         }
-        let realm = try openRealm(configuration: config)
+        let realm = try Realm(configuration: config)
+        waitForDownloads(for: realm)
         let events = realm.events!
         setInvalidTokensFor(user)
 
