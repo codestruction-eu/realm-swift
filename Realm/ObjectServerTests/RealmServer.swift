@@ -208,6 +208,14 @@ struct AdminProfile: Codable {
 extension DispatchGroup: @unchecked Sendable {
 }
 
+private extension DispatchGroup {
+    func throwingWait(timeout: DispatchTime) throws {
+        if wait(timeout: timeout) == .timedOut {
+            throw URLError(.timedOut)
+        }
+    }
+}
+
 // MARK: AdminSession
 /// An authenticated session for using the Admin API
 @available(macOS 10.12, *)
@@ -810,10 +818,12 @@ public class RealmServer: NSObject {
             }
         }
 
-        _ = app.secrets.post([
+        app.secrets.post(on: group, [
             "name": "BackingDB_uri",
             "value": "mongodb://localhost:26000"
-        ])
+        ], failOnError)
+
+        try group.throwingWait(timeout: .now() + 5.0)
 
         let appService: [String: Json] = [
             "name": "mongodb1",
@@ -828,8 +838,8 @@ public class RealmServer: NSObject {
             throw URLError(.badServerResponse)
         }
 
-        // Creating the schema is a two-step process where we first add all the
-        // objects with their properties to them so that we can add relationships
+        // Tests which don't explicitly set the schema will have a lot of sync-incompatible
+        // types when running via SPM as it includes the non-sync tests
         let syncTypes: [ObjectSchema]
         let partitionKeyType: String?
         if case .pbs(let bsonType) = syncMode {
@@ -845,37 +855,37 @@ public class RealmServer: NSObject {
             }
             partitionKeyType = nil
         }
-        var schemaCreations = [Result<Any?, Error>]()
-        var asymmetricTables = [String]()
+
+        // Creating the schema is a two-step process where we first add all the
+        // objects with their properties to them so that we can add relationships
+        let schemaCreations = Locked([[String: Any]]())
         for objectSchema in syncTypes {
-            schemaCreations.append(app.schemas.post(objectSchema.stitchRule(partitionKeyType)))
-            if objectSchema.isAsymmetric {
-                asymmetricTables.append(objectSchema.className)
+            app.schemas.post(on: group, objectSchema.stitchRule(partitionKeyType)) {
+                switch $0 {
+                case .success(let data):
+                    schemaCreations.withLock { $0.append(data as! [String: Any]) }
+                case .failure(let error):
+                    XCTFail(error.localizedDescription)
+                }
             }
         }
+        try group.throwingWait(timeout: .now() + 5.0)
 
         var schemaIds: [String: String] = [:]
-        for result in schemaCreations {
-            guard case .success(let data) = result else {
-                fatalError("Failed to create schema: \(result)")
-            }
-            let dict = (data as! [String: Any])
+        for dict in schemaCreations.value {
             let metadata = dict["metadata"] as! [String: String]
             schemaIds[metadata["collection"]!] = dict["_id"]! as? String
         }
 
-        var schemaUpdates = [Result<Any?, Error>]()
         for objectSchema in syncTypes {
             let schemaId = schemaIds[objectSchema.className]!
-            schemaUpdates.append(app.schemas[schemaId].put(objectSchema.stitchRule(partitionKeyType, id: schemaId)))
+            app.schemas[schemaId].put(on: group, data: objectSchema.stitchRule(partitionKeyType, id: schemaId), failOnError)
         }
+        try group.throwingWait(timeout: .now() + 5.0)
 
-        for result in schemaUpdates {
-            if case .failure(let error) = result {
-                fatalError("Failed to create relationships for schema: \(error)")
-            }
+        let asymmetricTables = syncTypes.compactMap {
+            $0.isAsymmetric ? $0.className : nil
         }
-
         let serviceConfig: [String: Json]
         switch syncMode {
         case .pbs(let bsonType):
@@ -903,7 +913,7 @@ public class RealmServer: NSObject {
                     "asymmetric_tables": asymmetricTables as [Json]
                 ]
             ]
-            app.services[serviceId].default_rule.post(on: group, [
+            _ = try app.services[serviceId].default_rule.post([
                 "roles": [[
                     "name": "all",
                     "apply_when": [String: Json](),
@@ -916,7 +926,7 @@ public class RealmServer: NSObject {
                     "insert": true,
                     "delete": true
                 ]]
-            ], failOnError)
+            ]).get()
         }
         _ = try app.services[serviceId].config.patch(serviceConfig).get()
 
@@ -997,9 +1007,7 @@ public class RealmServer: NSObject {
             "sync": ["disable_client_error_backoff": true]
         ], failOnError)
 
-        guard case .success = group.wait(timeout: .now() + 15.0) else {
-            throw URLError(.timedOut)
-        }
+        try group.throwingWait(timeout: .now() + 5.0)
 
         // Wait for initial sync to complete as connecting before that has a lot of problems
         try waitForSync(appServerId: appId, expectedCount: syncTypes.count - asymmetricTables.count)
