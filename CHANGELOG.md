@@ -13,6 +13,10 @@ x.y.z Release notes (yyyy-MM-dd)
   Note that this should not generally be used– sync is eventually consistent 
   and should be used as such. However, there are special cases (notable in 
   testing) where this may be used.
+* Allow in-memory synced Realms. This will allow setting and in-memory identifier on
+  flexible sync realms, this will not create a .realm file or its associated auxiliary 
+  files for the synced realm and instead stores objects in memory while the realm is 
+  open and discards them immediately when all instances are closed.
 
 ### Fixed
 * <How to hit and notice issue? what was the impact?> ([#????](https://github.com/realm/realm-swift/issues/????), since v?.?.?)
@@ -9187,7 +9191,7 @@ Prebuilt frameworks are now built with Xcode 7.1.
   the properties in a `RLMObject` subclass.
 * Fix crash on IN query with several thousand items.
 * Fix crash when querying indexed `NSString` properties.
-* Fixed an issue which prevented in-memory Realms from being used accross multiple threads.
+* Fixed an issue which prevented in-memory Realms from being used across multiple threads.
 * Preserve the sort order when querying a sorted `RLMResults`.
 * Fixed an issue with migrations where if a Realm file is deleted after a Realm is initialized,
   the newly created Realm can be initialized with an incorrect schema version.
