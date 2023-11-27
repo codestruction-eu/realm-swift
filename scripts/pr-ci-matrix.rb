@@ -17,7 +17,7 @@
 # To add new workflows which includes new platforms or schemes, the corresponding configuration should be
 # added to the `xcode_cloud-helper.rb` file.
 module WORKFLOWS
-  XCODE_VERSIONS = %w(14.1 14.2 14.3.1)
+  XCODE_VERSIONS = %w(14.1 14.2 14.3.1 15.0.1)
 
   all = ->(v) { true }
   latest_only = ->(v) { v == XCODE_VERSIONS.last }
