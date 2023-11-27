@@ -277,7 +277,7 @@ open class SwiftSyncTestCase: RLMSyncTestCase {
 
     public func waitForCollectionCount(_ collection: MongoCollection, _ count: Int) {
         let waitStart = Date()
-        while collection.count(filter: [:]).await(self) != count && waitStart.timeIntervalSinceNow > -600.0 {
+        while collection.count(filter: [:]).await(self) < count && waitStart.timeIntervalSinceNow > -600.0 {
             sleep(1)
         }
         XCTAssertEqual(collection.count(filter: [:]).await(self), count)

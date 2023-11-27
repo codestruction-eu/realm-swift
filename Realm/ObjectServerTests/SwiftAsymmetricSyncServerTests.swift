@@ -217,8 +217,8 @@ extension SwiftAsymmetricSyncTests {
         let mongoClient = user.mongoClient("mongodb1")
         let database = mongoClient.database(named: "test_data")
         let collection =  database.collection(withName: collection)
-        while collection.count(filter: [:]).await(self) != expectedCount && waitStart.timeIntervalSinceNow > -600.0 {
-            sleep(5)
+        while try await collection.count(filter: [:]) < expectedCount && waitStart.timeIntervalSinceNow > -600.0 {
+            try await Task.sleep(for: .seconds(5))
         }
 
         XCTAssertEqual(collection.count(filter: [:]).await(self), expectedCount)
@@ -226,6 +226,7 @@ extension SwiftAsymmetricSyncTests {
 
     @MainActor
     func testCreateAsymmetricObject() async throws {
+        _ = try await setupCollection("SwiftObjectAsymmetric")
         let realm = try await realm()
 
         // Create Asymmetric Objects
@@ -273,6 +274,7 @@ extension SwiftAsymmetricSyncTests {
 
     @MainActor
     func testCreateHugeAsymmetricObject() async throws {
+        _ = try await setupCollection("HugeObjectAsymmetric")
         let realm = try await realm()
 
         // Create Asymmetric Objects
