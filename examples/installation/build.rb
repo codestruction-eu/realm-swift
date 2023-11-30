@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-require 'FileUtils'
+require 'fileutils'
 
 def usage()
   puts <<~END
@@ -160,10 +160,10 @@ def download_realm(platform, method, static)
       download_release version
     else
       if static
-        copy_xcframework '../../build/Static', 'Realm'
+        copy_xcframework "../../build/Static/#{platform}", 'Realm'
       else
-        copy_xcframework '../../build/Release', 'Realm'
-        copy_xcframework '../../build/Release', 'RealmSwift'
+        copy_xcframework "../../build/Release/#{platform}", 'Realm'
+        copy_xcframework "../../build/Release/#{platform}", 'RealmSwift'
       end
     end
 

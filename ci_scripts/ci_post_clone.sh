@@ -10,9 +10,9 @@ COCOAPODS_VERSION="1.14.2"
 
 install_dependencies() {
     echo ">>> Installing dependencies for ${CI_WORKFLOW}"
-
     brew install moreutils
-    if [[ "$CI_WORKFLOW" == "docs"* ]] || [[ "$CI_WORKFLOW" == *"docs"* ]]; then
+
+    if [[ "$CI_WORKFLOW" == "docs"* ]]; then
         install_ruby
         gem install jazzy -v ${JAZZY_VERSION}
     elif [[ "$CI_WORKFLOW" == "swiftlint"* ]]; then
@@ -26,15 +26,7 @@ install_dependencies() {
         brew install carthage
     fi
 
-    if [[ "$CI_WORKFLOW" == "release"* ]]; then
-        echo "Installing release gems"
-        install_ruby
-        gem install octokit
-        gem install getoptlong
-        gem install xcodeproj
-    fi
-
-    if [[ "$CI_WORKFLOW" == *"package_15.1" ]]; then
+    if [[ "$CI_WORKFLOW" == *"package_15.1" ]] && [[ "$CI_PRODUCT_PLATFORM" == "xrOS" ]]; then
         # We need to install the visionOS because is not installed by default in the XCode Cloud image, 
         # even if the build action selected platform is visionOS.
         echo "Installing visionos"
@@ -97,18 +89,24 @@ install_dependencies
 cd ..
 
 if [[ "$CI_WORKFLOW" == "release"* ]]; then
-    echo "Release workflow"
-    TARGET="${CI_WORKFLOW%_*}"
-    XCODE_VERSION=${CI_WORKFLOW##*_}
-    sh -x build.sh "${TARGET}" "${XCODE_VERSION}" | ts
+    # Get target name without version
+    TARGET=$(echo "$CI_WORKFLOW" | cut -f1 -d_) 
+
+    # Update schemes configuration 
+    update_scheme_configuration ${TARGET}
+
+    echo "Release workflow for ${TARGET}"
+    sh -x build.sh "${TARGET}" | ts
 else
+    echo "PR Workflow"
     # CI PR Pipelines, use this path
-    # Get target name
+    # Get target name without version
     TARGET=$(echo "$CI_WORKFLOW" | cut -f1 -d_)  
 
     # Update schemes configuration
     update_scheme_configuration ${TARGET}
 
+    echo "PR Workflow for target ${TARGET}"
     export target="${TARGET}"
     sh -x build.sh ci-pr | ts
 fi  

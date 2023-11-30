@@ -3,19 +3,16 @@
 require 'fileutils'
 require 'pathname'
 require 'tmpdir'
-require_relative "release-matrix"
-
-include RELEASE
 
 raise 'usage: create-release-package.rb destination_path version [xcode_version]' unless ARGV.length >= 3
 
-DESTINATION = Pathname(ARGV[1])
-VERSION = ARGV[2]
-XCODE_VERSION = ARGV[3]
+DESTINATION = Pathname(ARGV[0])
+VERSION = ARGV[1]
+XCODE_VERSION = ARGV[2]
+OBJC_XCODE_VERSION = ARGV[3]
 ROOT = Pathname(__FILE__).+('../..').expand_path
 BUILD_SH = Pathname(__FILE__).+('../../build.sh').expand_path
 VERBOSE = false
-OBJC_XCODE_VERSION = RELEASE::XCODE_VERSIONS.last.partition(" ").first
 
 def sh(*args)
   puts "executing: #{args.join(' ')}" if VERBOSE
@@ -46,7 +43,7 @@ def zip(name, *files)
   sh 'zip', '--symlinks', '-r', path, *files
 end
 
-def create_version_xcframeworks
+def create_xcframework_package
   puts "Packaging version #{VERSION} for Xcode version #{XCODE_VERSION}"
   FileUtils.mkdir_p DESTINATION
 
@@ -68,7 +65,7 @@ def create_version_xcframeworks
     end
 
     # Creates a RealmSwift.xcframework from each platform framework for any supported architecture (device and simulator). 
-    puts "Creating Swift XCFrameworks for Xcode #{XCODE_VERSION}"
+    puts "Creating RealmSwift XCFrameworks for Xcode #{XCODE_VERSION}"
     create_xcframework tmp, XCODE_VERSION, 'Release', 'RealmSwift'
 
     if XCODE_VERSION == OBJC_XCODE_VERSION
@@ -100,7 +97,7 @@ def create_version_xcframeworks
     end
 
     # Copy the generated RealmSwift.xcframework into a temp directory following this notation realm-swift-#{VERSION}/#{XCODE_VERSION}/
-    puts "Copying Release XCFramework into a #{XCODE_VERSION} folder"
+    puts "Copying Release RealmSwift into a #{XCODE_VERSION} folder"
     FileUtils.mkdir_p "#{package_dir}/#{XCODE_VERSION}"
     sh 'cp', '-Rca', "#{tmp}/#{XCODE_VERSION}/Release/RealmSwift.xcframework", "#{package_dir}/#{XCODE_VERSION}"
     
@@ -116,12 +113,13 @@ def create_version_xcframeworks
     end
 
     # Zip the generated RealmSwift/Realm(Static) xcframework into a generated realm-swift-#{VERSION}.zip
-    puts 'Packing all the xcframework into a zip, only for latest xcode version'
+    puts 'Packing all the xcframework into a zip for version'
     Dir.chdir(tmp) do
-      zip "realm-swift-#{VERSION}_#{XCODE_VERSION}.zip", "realm-swift-#{VERSION}"
+      zip "realm-swift-#{VERSION}-#{XCODE_VERSION}.zip", "realm-swift-#{VERSION}"
     end
 
     # Zip generated RealmSwift.xcframework into a generated RealmSwift@#{XCODE_VERSION}.spm.zip 
+    puts 'Packing RealmSwift@ into a zip'
     Dir.chdir "#{tmp}/#{XCODE_VERSION}/Release" do
       zip "RealmSwift@#{XCODE_VERSION}.spm.zip", 'RealmSwift.xcframework'
     end
@@ -162,7 +160,4 @@ def create_version_xcframeworks
   end
 end
 
-if ARGV[0] == 'create-version-xcframeworks'
-  create_version_xcframeworks
-end
-
+create_xcframework_package

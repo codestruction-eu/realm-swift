@@ -2,6 +2,9 @@
 
 require 'pathname'
 require 'octokit'
+require 'uri'
+require 'open-uri'
+require 'fileutils'
 
 VERSION = ARGV[1]
 ACCESS_TOKEN = ENV['GITHUB_ACCESS_TOKEN']
@@ -27,26 +30,6 @@ def release_notes(version)
   relevant.join.strip
 end
 
-def create_draft_release
-  name = 'Artifacts release'
-  github = Octokit::Client.new
-  github.access_token = ENV['GITHUB_ACCESS_TOKEN']
-
-  puts 'Search for draft releases' # Previously created by a merge to master
-  releases = github.releases(REPOSITORY)
-  draft_releases = releases.select { |release| release[:name] == name && release[:draft] == true }
-
-  draft_releases.each { |draf_release| 
-    puts 'Deleting draft release' # Previously created by a merge to master
-    response = github.delete_release(draf_release[:url])
-  } 
-
-  puts 'Creating GitHub draft release'
-  response = github.create_release(REPOSITORY, RELEASE, name: name, body: "Artifacts release", draft: true)
-  
-  puts "Succesfully created draft release #{response[:url]}"
-end
-
 def create_release
   release_notes = release_notes(VERSION)
   github = Octokit::Client.new
@@ -54,7 +37,7 @@ def create_release
 
   puts 'Creating GitHub release'
   prerelease = (VERSION =~ /alpha|beta|rc|preview/) ? true : false
-  response = github.create_release(REPOSITORY, RELEASE, name: RELEASE, body: release_notes, prerelease: false)
+  response = github.create_release(REPOSITORY, RELEASE, name: RELEASE, body: release_notes, prerelease: prerelease)
   release_url = response[:url]
 
   Dir.glob 'release_pkg/*.zip' do |upload|
@@ -70,9 +53,7 @@ def package_release_notes
   out_file.puts(release_notes)
 end
 
-if ARGV[0] == 'create-draft-release'
-  create_draft_release
-elsif ARGV[0] == 'create-release'
+if ARGV[0] == 'create-release'
   create_release
 elsif ARGV[0] == 'package-release-notes'
   package_release_notes

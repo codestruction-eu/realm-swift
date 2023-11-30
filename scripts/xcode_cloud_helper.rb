@@ -7,10 +7,8 @@ require "base64"
 require "jwt"
 require 'getoptlong'
 require_relative "pr-ci-matrix"
-require_relative "release-matrix"
 
 include WORKFLOWS
-include RELEASE
 
 JWT_BEARER = ''
 TEAM_ID = ''
@@ -160,6 +158,42 @@ def get_xcode_versions
     return list_xcodeversion
 end
 
+def get_xcode_versions
+    response = get("/ciXcodeVersions")
+    result = JSON.parse(response.body)
+    list_xcodeversion = []
+    result.collect do |doc|
+        doc[1].each { |xcode|
+            if xcode.class == Hash
+                list_xcodeversion.append({ "name" =>  xcode["attributes"]["name"], "id" => xcode["id"], "version" => xcode["attributes"]["version"] })
+            end
+        }
+    end
+    return list_xcodeversion
+end
+
+def find_git_reference_for_branch(branch)
+    next_page = ''
+    references = get_git_references
+    branch_reference = references["data"].find { |reference| 
+        reference["attributes"]["kind"] == "BRANCH" && reference["attributes"]["name"] == branch 
+    }    
+    while branch_reference == nil || next_page == nil
+        next_page = references["links"]["next"]
+        next_page.slice!(APP_STORE_URL)
+        next_results = get(next_page)
+        references = JSON.parse(next_results.body)
+        branch_reference = references["data"].find { |reference| reference["attributes"]["kind"] == "BRANCH" && reference["attributes"]["name"] == branch } 
+    end
+    return branch_reference["id"]
+end
+
+def get_git_references
+    repository_id = get_realm_repository_id
+    response = get("/scmRepositories/#{repository_id}/gitReferences?limit=200")
+    return result = JSON.parse(response.body)
+end
+
 def print_workflow_info(id)
     workflow_info = get_workflow_info(id)
     puts "Workflow Info:"
@@ -198,7 +232,7 @@ def get(path)
     end
 end
 
-def create_workflow(name, xcode_version, prefix = "")
+def create_workflow(type, name, xcode_version, prefix = "")
     url = "#{APP_STORE_URL}/ciWorkflows"
     uri = URI.parse(url)
     http = Net::HTTP.new(uri.host, uri.port)
@@ -206,23 +240,21 @@ def create_workflow(name, xcode_version, prefix = "")
     request = Net::HTTP::Post.new(uri)
     request["Authorization"] = "Bearer #{JWT_BEARER}"
     request["Content-type"] = "application/json"
-    body = create_workflow_request(name, xcode_version, prefix)
+    body = create_workflow_request(type, name, xcode_version, prefix)
     request.body = body.to_json
     response = http.request(request)
     if response.code == "201"
         result = JSON.parse(response.body)
         id = result["data"]["id"]
-        puts "Worfklow created id: #{id} target: #{prefix}#{name} xcode version: #{xcode_version}"
-        product_id = get_realm_product_id
-        puts "https://appstoreconnect.apple.com/teams/#{TEAM_ID}/frameworks/#{product_id}/workflows/#{id}"
         return id
+        puts id
     else
         raise "Error: #{response.code} #{response.body}"
     end
 end
 
-def create_workflow_request(name, xcode_version, prefix = "")
-    build_action = get_action_for_target(name)
+def create_workflow_request(type, name, xcode_version, prefix = "")
+    actions = [get_action_for_target(type, name)]
     pull_request_start_condition =
     {
         "source" => { "isAllMatch" => true, "patterns" => [] },
@@ -238,7 +270,7 @@ def create_workflow_request(name, xcode_version, prefix = "")
         "isEnabled" => false,
         "clean" => false,
         "pullRequestStartCondition" => pull_request_start_condition,
-        "actions" => build_action
+        "actions" => actions
     }
 
     xcode_version_id = get_xcode_id(xcode_version)
@@ -259,6 +291,153 @@ def create_workflow_request(name, xcode_version, prefix = "")
     body = { "data" => data }
     return body
 end
+
+def get_action_for_target(type, name)
+    target_split = name.split('-')
+    platform = target_split[0]
+    target = target_split[1]
+
+    platform_name = ''
+    build_platform = ''
+    test_destination = ''
+    destination = nil
+    case platform
+    when 'osx'
+        platform_name = "macOS"
+        build_platform = 'MACOS'
+        test_destination = {
+            "deviceTypeName" => "Mac",
+            "deviceTypeIdentifier" => "mac",
+            "runtimeName" => "Same As Selected macOS Version",
+            "runtimeIdentifier" => "builder",
+            "kind" => "MAC"
+        }
+        destination = 'ANY_MAC'
+    when 'catalyst'
+        platform_name = 'macOS (Catalyst)'
+        build_platform = 'MACOS'
+        test_destination = {
+            "deviceTypeName" => "Mac (Mac Catalyst)",
+            "deviceTypeIdentifier" => "mac_catalyst",
+            "runtimeName" => "Same As Selected macOS Version",
+            "runtimeIdentifier" => "builder",
+            "kind" => "MAC"
+        }
+        destination = 'ANY_MAC_CATALYST'
+    when 'ios'
+        platform_name = 'iOS'
+        build_platform = 'IOS'
+        test_destination = {
+            "deviceTypeName" => "iPhone 11",
+            "deviceTypeIdentifier" => "com.apple.CoreSimulator.SimDeviceType.iPhone-11",
+            "runtimeName" => "Latest from Selected Xcode (iOS 16.1)",
+            "runtimeIdentifier" => "default",
+            "kind" => "SIMULATOR"
+        }
+        destination = 'ANY_IOS_DEVICE'
+    when 'iossimulator'
+        platform_name = 'iOS Simulator'
+        build_platform = 'IOS'
+        test_destination = {
+            "deviceTypeName" => "iPhone 11",
+            "deviceTypeIdentifier" => "com.apple.CoreSimulator.SimDeviceType.iPhone-11",
+            "runtimeName" => "Latest from Selected Xcode (iOS 16.1)",
+            "runtimeIdentifier" => "default",
+            "kind" => "SIMULATOR"
+        }
+        destination = 'ANY_IOS_SIMULATOR'
+    when 'tvos'
+        platform_name = 'tvOS'
+        build_platform = 'TVOS'
+        test_destination = {
+            "deviceTypeName" => "Recommended Apple TVs",
+            "deviceTypeIdentifier" =>  "recommended_apple_tvs",
+            "runtimeName" =>  "Latest from Selected Xcode (tvOS 16.4)",
+            "runtimeIdentifier" =>  "default",
+            "kind" =>  "SIMULATOR"
+        }
+        destination = 'ANY_TVOS_DEVICE'
+    when 'tvossimulator'
+        platform_name = 'tvOS Simulator'
+        build_platform = 'TVOS'
+        test_destination = {
+            "deviceTypeName" => "Recommended Apple TVs",
+            "deviceTypeIdentifier" =>  "recommended_apple_tvs",
+            "runtimeName" =>  "Latest from Selected Xcode (tvOS 16.4)",
+            "runtimeIdentifier" =>  "default",
+            "kind" =>  "SIMULATOR"
+        }
+        destination = 'ANY_TVOS_SIMULATOR'
+    when 'watchos'
+        platform_name = 'watchOS'
+        build_platform = 'WATCHOS'
+        test_destination = {
+            "deviceTypeName" => "Recommended Apple Watches",
+            "deviceTypeIdentifier" =>  "recommended_apple_watches",
+            "runtimeName" =>  "Latest from Selected Xcode (watchOS 10.0)",
+            "runtimeIdentifier" =>  "default",
+            "kind" =>  "SIMULATOR"
+        }
+        destination = 'ANY_WATCHOS_DEVICE'
+    when 'watchossimulator'
+        platform_name = 'watchOS Simulator'
+        build_platform = 'WATCHOS'
+        test_destination = {
+            "deviceTypeName" => "Recommended Apple Watches",
+            "deviceTypeIdentifier" =>  "recommended_apple_watches",
+            "runtimeName" =>  "Latest from Selected Xcode (watchOS 10.0)",
+            "runtimeIdentifier" =>  "default",
+            "kind" =>  "SIMULATOR"
+        }
+        destination = 'ANY_WATCHOS_SIMULATOR'
+    when 'visionos'
+        platform_name = 'visionOS'
+        build_platform = 'VISIONOS'
+        test_destination = nil
+        destination = 'ANY_VISIONOS_DEVICE'
+    when 'visionossimulator'
+        platform_name = 'visionOS Simulator'
+        build_platform = 'VISIONOS'
+        test_destination = nil
+        destination = 'ANY_VISIONOS_SIMULATOR'
+    else # docs, swiftlint, cocoapods, swiftpm, spm, xcframework, objectserver, watchos
+
+    end
+
+    scheme = case target
+    when 'swift', 'RealmSwift'
+        "RealmSwift"
+    when 'swiftui'
+        "SwiftUITests"
+    when 'swiftuiserver'
+        "SwiftUISyncTests"
+    when 'Realm'
+        "Realm"
+    else
+        "Realm"
+    end
+
+    test_configuration = nil
+    if type == 'test'
+        test_configuration = {
+            "kind" => "USE_SCHEME_SETTINGS",
+            "testPlanName" => "",
+            "testDestinations" => [ destination ]
+        }
+    end
+        
+    name_type = type == 'test' ? 'Test' : 'Build'
+    return {
+        "name" => "#{name_type} - #{platform_name}",
+        "actionType" => type == 'test' ? 'TEST' : 'BUILD',
+        "destination" => destination,
+        "buildDistributionAudience" => nil,
+        "testConfiguration" => test_configuration,
+        "scheme" => scheme,
+        "platform" => build_platform,
+        "isRequiredToPass" => true
+    }
+end 
 
 def update_workflow(id, data)
     url = "#{APP_STORE_URL}/ciWorkflows/#{id}"
@@ -297,7 +476,7 @@ def delete_workflow(id)
     end
 end
 
-def start_build(id)
+def start_build(id, branch)
     url = "#{APP_STORE_URL}/ciBuildRuns"
     uri = URI.parse(url)
     http = Net::HTTP.new(uri.host, uri.port)
@@ -305,11 +484,13 @@ def start_build(id)
     request = Net::HTTP::Post.new(uri)
     request["Authorization"] = "Bearer #{JWT_BEARER}"
     request["Content-type"] = "application/json"
+    branch_id = find_git_reference_for_branch(branch)
     data =
     {
         "type" => "ciBuildRuns",
         "attributes" => { "clean" => true },
-        "relationships" => { "workflow" => { "data" => { "type" => "ciWorkflows", "id" => id }}}
+        "relationships" => { "workflow" => { "data" => { "type" => "ciWorkflows", "id" => id }},
+                            "sourceBranchOrTag" => { "data" => { "type" => "scmGitReferences", "id" => branch_id }}}
     }
     body = { "data" => data }
     request.body = body.to_json
@@ -317,9 +498,6 @@ def start_build(id)
     if response.code == "201"
         result = JSON.parse(response.body)
         build_id = result["data"]["id"]
-        puts "Workflow build started with id: #{id}:"
-        puts "Running build https://appstoreconnect.apple.com/teams/#{TEAM_ID}/frameworks/#{get_realm_product_id}/builds/#{build_id}/"
-        puts response.body
         return build_id
     else
         raise "Error: #{response.code} #{response.body}"
@@ -385,50 +563,9 @@ def create_new_workflows
             name = workflow['target']
             version = workflow['version']
             puts "Creating new workflow for target: #{name} and version #{version}"
-            workflow_id = create_workflow(name, version)
-        }
-    else
-        puts "No"
-    end
-end
-
-def create_new_release_workflows
-    if !ENV.include?('CI')
-        print 'Are you sure you want to create this workflows?, this will create declared local workflows that may not currently working in other PRs [Y/N]\n'
-        user_input = STDIN.gets.chomp.downcase
-    else 
-        user_input = 'y'
-    end
-
-    if user_input == "y"
-        current_workflows = get_workflows()
-        .filter {  |workflow| 
-            workflow["attributes"]["name"].split('_').first == 'release' 
-        }
-        .map { |workflow| 
-            target = workflow["attributes"]["name"].split('_')
-            name = target[1]
-            version = target.last
-            { 'target' => name, 'version' => version }
-        }
-
-        workflows_to_create = []
-        RELEASE::RELEASE_XCODE_CLOUD_TARGETS.each { |name, filter|
-            RELEASE::XCODE_VERSIONS.each { |version|
-                if filter.call(version)
-                    workflow = { "target" => name, "version" => version }
-                    unless current_workflows.include? workflow
-                        workflows_to_create.append(workflow)
-                    end
-                end
-            }
-        }
-
-        workflows_to_create.each { |workflow|
-            name = workflow['target']
-            version = workflow['version']
-            puts "Creating new workflow for target: #{name} and version #{version} for release"
-            workflow_id = create_workflow(name, version, 'release_')
+            workflow_id = create_workflow('test', name, version)
+            product_id = get_realm_product_id
+            puts "https://appstoreconnect.apple.com/teams/#{TEAM_ID}/frameworks/#{product_id}/workflows/#{workflow_id}"
         }
     else
         puts "No"
@@ -469,142 +606,6 @@ def delete_unused_workflows
         puts "No"
     end
 end
-
-def delete_unused_release_workflows
-    if !ENV.include?('CI')
-        print "Are you sure you want to clear unused workflow?, this will delete not-declared local workflows that may be currently working in other PRs [Y/N]\n"
-        user_input = STDIN.gets.chomp.downcase
-    else 
-        user_input = 'y'
-    end
-    
-    if user_input == "y"
-        local_workflows = ["release_package-docs_#{RELEASE::DOCS_XCODE_VERSION}"]
-        RELEASE::RELEASE_XCODE_CLOUD_TARGETS.each { |name, filter|
-            RELEASE::XCODE_VERSIONS.each { |version|
-                if filter.call(version)
-                    local_workflows.append("release_#{name}_#{version}")
-                end
-            }
-        }
-
-        remote_workflows = get_workflows
-        .filter { |workflow| 
-            workflow["attributes"]["name"].split('_').first == 'release' 
-        }
-        .map { |workflow| 
-            name = workflow["attributes"]["name"]
-            unless local_workflows.include? name
-                puts "Deleting unused release workflow #{workflow["id"]} #{name}"
-                delete_workflow(workflow["id"])
-            end
-        }
-          
-    else
-        puts "No"
-    end
-end
-
-def get_action_for_target(name)
-    workflow_id = get_workflow_id_for_name(name)
-    if workflow_id.nil?
-        get_new_action_for_target(name)
-    else
-        workflow_info = get_workflow_info(workflow_id)
-        result = JSON.parse(workflow_info)
-        build_action = result["data"]["attributes"]["actions"]
-        return build_action
-    end
-end 
-
-def get_new_action_for_target(name)
-    target_split = name.split('-')
-    platform = target_split[0]
-    target = target_split[1]
-
-    name = ''
-    build_platform = ''
-    test_destination = ''
-    case platform
-    when 'osx'
-        name = 'Test - macOS'
-        build_platform = 'MACOS'
-        test_destination = {
-            "deviceTypeName" => "Mac",
-            "deviceTypeIdentifier" => "mac",
-            "runtimeName" => "Same As Selected macOS Version",
-            "runtimeIdentifier" => "builder",
-            "kind" => "MAC"
-        }
-    when 'catalyst'
-        name = 'Test - macOS (Catalyst)'
-        build_platform = 'MACOS'
-        test_destination = {
-            "deviceTypeName" => "Mac (Mac Catalyst)",
-            "deviceTypeIdentifier" => "mac_catalyst",
-            "runtimeName" => "Same As Selected macOS Version",
-            "runtimeIdentifier" => "builder",
-            "kind" => "MAC"
-        }
-    when 'ios'
-        name = 'Test - iOS'
-        build_platform = 'IOS'
-        test_destination = {
-            "deviceTypeName" => "iPhone 11",
-            "deviceTypeIdentifier" => "com.apple.CoreSimulator.SimDeviceType.iPhone-11",
-            "runtimeName" => "Latest from Selected Xcode (iOS 16.1)",
-            "runtimeIdentifier" => "default",
-            "kind" => "SIMULATOR"
-        }
-    when 'tvos'
-        name = 'Test - tvOS'
-        build_platform = 'TVOS'
-        test_destination = {
-            "deviceTypeName" => "Recommended Apple TVs",
-            "deviceTypeIdentifier" =>  "recommended_apple_tvs",
-            "runtimeName" =>  "Latest from Selected Xcode (tvOS 16.4)",
-            "runtimeIdentifier" =>  "default",
-            "kind" =>  "SIMULATOR"
-        }
-    else #docs, swiftlint, cocoapods, swiftpm, spm, xcframework, objectserver, watchos
-        return [{
-            "name" =>  "Build - macOS",
-            "actionType" => "BUILD",
-            "destination" => "ANY_MAC",
-            "buildDistributionAudience" => nil,
-            "testConfiguration" => nil,
-            "scheme" => "CI",
-            "platform" => "MACOS",
-            "isRequiredToPass" => true
-        }]
-    end
-
-    scheme = case target
-    when 'swift'
-        "RealmSwift"
-    when 'swiftui'
-        "SwiftUITests"
-    when 'swiftuiserver'
-        "SwiftUISyncTests"
-    else
-        "Realm"
-    end
-
-    return [{
-        "name" => name,
-        "actionType" => "TEST",
-        "destination" => nil,
-        "buildDistributionAudience" => nil,
-        "testConfiguration" => {
-            "kind" => "USE_SCHEME_SETTINGS",
-            "testPlanName" => "",
-            "testDestinations" => [ test_destination ]
-        },
-        "scheme" => scheme,
-        "platform" => build_platform,
-        "isRequiredToPass" => true
-    }]
-end 
 
 def get_xcode_id(version)
     list_xcodeversion = ''
@@ -663,32 +664,12 @@ def get_realm_repository_id
     end
 end
 
-def get_workflow_id_for_name(name)
-    workflows = ''
-    if $workflows_list != ''
-        workflows = $workflows_list
-    else 
-        workflows = get_workflows
-        $workflows_list = workflows
-    end
-    workflows.each do |workflow|
-        if workflow["attributes"]["name"] == name
-            return workflow["id"]
-        end
-    end
-    return nil
-end
-
 def read_build_info(build_id)
     response = get("/ciBuildRuns/#{build_id}")
     return response.body
 end
 
-def run_release_workflow(name)
-    puts "Running workflow #{name}"
-    workflow_id = get_workflow_id_for_name(name)
-    build_id = start_build(workflow_id) 
-end
+#### Release scripts
 
 def check_status_and_wait(build_run)
     begin
@@ -705,43 +686,52 @@ def check_status_and_wait(build_run)
     build_state = read_build_info(build_run)
     result = JSON.parse(build_state)
     completion_status = result["data"]["attributes"]["completionStatus"]
+    get_logs_for_build(build_run)
     if completion_status != 'SUCCEEDED'
        puts "Completion status #{completion_status}"
        raise "Error running build"
     end
-    get_logs_for_build(build_run)
     return
 end
 
 def get_logs_for_build(build_run)
     actions = get_build_actions(build_run)
-    artifacts = get_artifacts(actions[0]["id"])
-    artifact_info = get_artifact_info(artifacts[0]["id"])
-    result = JSON.parse(artifact_info)
-    artifact_url = result["data"]["attributes"]["downloadUrl"]
-    print_artifact_logs(artifact_url)
+    artifacts = get_artifacts(actions[0]["id"]) # we are only running one actions, so we use the first one in the list
+    artifact_url = ''
+    artifacts.each { |artifact| 
+        artifact_info = get_artifact_info(artifact['id'])
+        result = JSON.parse(artifact_info)
+        if result["data"]["attributes"]["fileName"].include? 'Logs' 
+            artifact_url = result["data"]["attributes"]["downloadUrl"]
+        end
+    }
+    print_logs(artifact_url)
 end
 
-def check_workflow_execution_status(build_id)
-    build_state = read_build_info(build_id)
-    result = JSON.parse(build_state)
-    status = result["data"]["attributes"]["executionProgress"]
-    return status
-end
-
-def create_workflow_and_run(name, xcode_version, prefix)
-    workflow_id = create_workflow(name, xcode_version, prefix)
-    build_run = start_build(workflow_id)
-    check_status_and_wait(build_run)
-end
-
-def print_artifact_logs(url)
+def print_logs(url)
     sh 'curl', '--output', 'logs.zip', "#{url}"
     sh 'unzip', "logs.zip"
-    file_name = Dir["RealmSwift*/ci_post_clone.log"]
-    text = File.readlines("#{file_name[0]}").map do |line|
-        puts line
-    end
+    log_files = Dir["RealmSwift*/*.log"]
+    log_files.each { |log_file| 
+        text = File.readlines("#{log_file}").map do |line|
+            puts line
+        end
+    }   
+end
+
+def download_artifact_for_build(build_id_run)
+    actions = get_build_actions(build_id_run)
+    artifacts = get_artifacts(actions[0]["id"]) # One actions per workflow
+    artifact_url = ''
+    artifacts.each { |artifact| 
+        artifact_info = get_artifact_info(artifact['id'])
+        result = JSON.parse(artifact_info)
+        if result["data"]["attributes"]["fileName"].include? 'Products' 
+            artifact_url = result["data"]["attributes"]["downloadUrl"]
+        end
+    }
+
+    sh 'curl', '--output', "product.zip", "#{artifact_url}"
 end
 
 opts = GetoptLong.new(
@@ -752,7 +742,7 @@ opts = GetoptLong.new(
     [ '--issuer-id', GetoptLong::REQUIRED_ARGUMENT ],
     [ '--key-id', GetoptLong::REQUIRED_ARGUMENT ],
     [ '--pk-path', GetoptLong::REQUIRED_ARGUMENT ],
-    [ '--prefix', GetoptLong::REQUIRED_ARGUMENT ],
+    [ '--branch', GetoptLong::REQUIRED_ARGUMENT ],
     [ '--list-workflows', GetoptLong::NO_ARGUMENT ],
     [ '--list-products', GetoptLong::NO_ARGUMENT ],
     [ '--list-repositories', GetoptLong::NO_ARGUMENT ],
@@ -764,28 +754,27 @@ opts = GetoptLong.new(
     [ '--delete-workflow', GetoptLong::REQUIRED_ARGUMENT ],
     [ '--build-workflow', GetoptLong::REQUIRED_ARGUMENT ],
     [ '--create-new-workflows', GetoptLong::NO_ARGUMENT ],
-    [ '--create-new-release-workflows', GetoptLong::NO_ARGUMENT ],
     [ '--clear-unused-workflows', GetoptLong::NO_ARGUMENT ],
-    [ '--clear-unused-release-workflows', GetoptLong::NO_ARGUMENT ],
     [ '--run-release-workflow', GetoptLong::REQUIRED_ARGUMENT ],
     [ '--check-workflow-status', GetoptLong::REQUIRED_ARGUMENT ],
-    [ '--create-release-workflow-and-run', GetoptLong::REQUIRED_ARGUMENT ],
+    [ '--create-build-workflow', GetoptLong::REQUIRED_ARGUMENT ],
+    [ '--download-build-artifact', GetoptLong::REQUIRED_ARGUMENT ],
     [ '--get-token', GetoptLong::NO_ARGUMENT ]
 )
 
 option = ''
 name = ''
 workflow_id = ''
-build_id = ''
+build_run_id = ''
 xcode_version = ''
 issuer_id = ''
 key_id = ''
 pk_path = ''
 release_workflow_name = ''
-prefix = ''
+branch_name = ''
 
 opts.each do |opt, arg|
-    if opt != '--token' && opt != '--xcode-version' && opt != '--issuer-id' && opt != '--key-id' && opt != '--pk-path' && opt != '--team-id'
+    if opt != '--token' && opt != '--xcode-version' && opt != '--issuer-id' && opt != '--key-id' && opt != '--pk-path' && opt != '--team-id' && opt != '--branch'
         option = opt
     end
     case opt
@@ -814,8 +803,7 @@ hello [OPTION] ...
 --pk-path [pk_path]:
     Apple Connect API path to private key file.
 
---prefix [prefix]:
-    Prefix name for a new workflow.
+--branch:
 
 --list-workflows:
     Returns a list of current workflows for the RealmSwift product.
@@ -851,14 +839,8 @@ hello [OPTION] ...
 --create-new-workflows:
     Adds the missing workflows corresponding to the list of targets and xcode versions in `pr-ci-matrix.rb`.
     
---create-new-release-workflows
-    Create new workflows for the release pipeline.
-    
 --clear-unused-workflows:
     Clear all unused workflows which are not in the list of targets and xcode versions in `pr-ci-matrix.rb`.
-
---clear-unused-release-workflows
-    Clear all unused workflows for the release pipeline
 
 --run-release-workflow
     Runs a release workflow
@@ -866,8 +848,14 @@ hello [OPTION] ...
 --check-workflow-status
     Check workflow status 
 
---create-release-workflow-and-run
-    Creates a workflow, runs it and wait for it to finish
+--create-build-workflow
+    Creates a wrokflow with a build which can be used to build a product for release
+
+--create-test-workflow
+    Creates a wrokflow with a build which can be used to build a product for release
+
+--download-build-artifact
+    Downloads an artifact produces by a build action within a workflow
 
 --get-token:
     Get Apple Connect Store API Token for local use.
@@ -896,15 +884,15 @@ hello [OPTION] ...
             if arg != ''
                 pk_path = arg
             end
-        when '--prefix'
+        when '--branch'
             if arg != ''
-                prefix = arg
+                branch_name = arg
             end
-        when '--info-workflow'
+        when '--info-workflow', '--run-release-workflow'
             if arg != ''
                 workflow_id = arg
             end
-        when '--create-workflow', '--create-release-workflow-and-run'
+        when '--create-workflow', '--create-build-workflow', '--create-test-workflow'
             if arg != ''
                 name = arg
             end
@@ -916,13 +904,9 @@ hello [OPTION] ...
             if arg != ''
                 xcode_version = arg
             end
-        when '--run-release-workflow'
+        when '--check-workflow-status', '--download-build-artifact'
             if arg != ''
-                release_workflow_name = arg
-            end
-        when '--check-workflow-status'
-            if arg != ''
-                build_id = arg
+                build_run_id = arg
             end
     end
 end
@@ -941,6 +925,8 @@ elsif option == '--list-mac-versions'
     puts get_macos_versions
 elsif option == '--list-xcode-versions'
     puts get_xcode_versions
+elsif option == '--list-git-references'
+    puts get_git_references
 elsif option == '--info-workflow'
     if workflow_id == ''
         raise 'Needs workflow id'
@@ -951,7 +937,7 @@ elsif option == '--create-workflow'
     if name == '' || xcode_version == ''
         raise 'Needs name and xcode version'
     else
-        create_workflow(name, xcode_version, prefix)
+        create_workflow(name, xcode_version)
     end
 elsif option == '--update-workflow'
     if workflow_id == ''
@@ -969,7 +955,9 @@ elsif option == '--build-workflow'
     if workflow_id == ''
         raise 'Needs workflow id'
     else
-        start_build(workflow_id)
+        puts "Workflow build started with id: #{workflow_id}:"
+        build_run_id = start_build(workflow_id)
+        puts "Running build https://appstoreconnect.apple.com/teams/#{TEAM_ID}/frameworks/#{get_realm_product_id}/builds/#{build_run_id}/"
     end
 elsif option == '--create-new-workflows'
     if TEAM_ID == ''
@@ -977,16 +965,8 @@ elsif option == '--create-new-workflows'
     else
         create_new_workflows
     end
-elsif option == '--create-new-release-workflows'
-    if TEAM_ID == ''
-        raise 'Needs team id'
-    else
-        create_new_release_workflows
-    end
 elsif option == '--clear-unused-workflows'
     delete_unused_workflows
-elsif option == '--clear-unused-release-workflows'
-    delete_unused_release_workflows
 elsif option == '--get-token'
     if issuer_id == '' || key_id == '' || pk_path == ''
         raise 'Needs issuer id, key id or pk id.'
@@ -994,21 +974,29 @@ elsif option == '--get-token'
         get_jwt_bearer(issuer_id, key_id, pk_path)
     end
 elsif option == '--run-release-workflow'
-    if  release_workflow_name == ''
-        raise 'Needs workflow name to run.'
+    if  workflow_id == '' || branch_name  == ''
+        raise 'Needs workflow id or branch name to run.'
     else
-        run_release_workflow(release_workflow_name)
+        build_run_id = start_build(workflow_id, branch_name)
+        puts build_run_id
     end
 elsif option == '--check-workflow-status'
-    if  build_id == ''
+    if  build_run_id == ''
         raise 'Needs build id name to run.'
     else
-        check_workflow_execution_status(build_id)
+        check_status_and_wait(build_run_id)
     end
-elsif option == '--create-release-workflow-and-run'
+elsif option == '--create-build-workflow'
     if name == '' || xcode_version == ''
         raise 'Needs name and xcode version'
     else
-        create_workflow_and_run(name, xcode_version, "release_")
+        workflow_id = create_workflow('build', name, xcode_version, "release-package-")
+        puts workflow_id
+    end
+elsif option == '--download-build-artifact'
+    if  build_run_id == ''
+        raise 'Needs build id name to run.'
+    else
+        download_artifact_for_build(build_run_id,)
     end
 end
