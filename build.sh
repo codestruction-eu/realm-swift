@@ -502,13 +502,13 @@ case "$COMMAND" in
 
     "test-ios")
         # Even 
-        xc -scheme Realm -configuration "$CONFIGURATION" -sdk iphonesimulator -destination 'name=iPhone 11'
+        xc -scheme Realm -configuration "$CONFIGURATION" -sdk iphonesimulator -destination 'name=iPhone 14'
 
         exit 0
         ;;
 
     "test-ios-swift")
-        xc -scheme RealmSwift -configuration "$CONFIGURATION" -sdk iphonesimulator -destination 'name=iPhone 11'
+        xc -scheme RealmSwift -configuration "$CONFIGURATION" -sdk iphonesimulator -destination 'name=iPhone 14'
         
         exit 0
         ;;
