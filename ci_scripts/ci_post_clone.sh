@@ -34,7 +34,7 @@ install_dependencies() {
         gem install xcodeproj
     fi
 
-    if [[ "$CI_WORKFLOW" == *"package_15.1" ]]; then
+    if [[ "$CI_WORKFLOW" == *"package_15.1" ]] && [[ "$CI_PRODUCT_PLATFORM" == "visionOS" ]]; then
         # We need to install the visionOS because is not installed by default in the XCode Cloud image, 
         # even if the build action selected platform is visionOS.
         echo "Installing visionos"
@@ -100,6 +100,8 @@ if [[ "$CI_WORKFLOW" == "release"* ]]; then
     echo "Release workflow"
     TARGET="${CI_WORKFLOW%_*}"
     XCODE_VERSION=${CI_WORKFLOW##*_}
+
+    update_scheme_configuration ${TARGET}
     sh -x build.sh "${TARGET}" "${XCODE_VERSION}" | ts
 else
     # CI PR Pipelines, use this path
