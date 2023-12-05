@@ -505,15 +505,16 @@ case "$COMMAND" in
         ;;
 
     "test-ios")
-        # Even 
-        xc -scheme Realm -configuration "$CONFIGURATION" -sdk iphonesimulator -destination 'name=iPhone 14'
-
+        if [ -z "$CI" ]; then
+            xctest Realm -configuration "$CONFIGURATION" -sdk iphonesimulator -destination 'name=iPhone 14'
+        fi
         exit 0
         ;;
 
     "test-ios-swift")
-        xc -scheme RealmSwift -configuration "$CONFIGURATION" -sdk iphonesimulator -destination 'name=iPhone 14'
-        
+        if [ -z "$CI" ]; then
+            xctest RealmSwift -configuration "$CONFIGURATION" -sdk iphonesimulator -destination 'name=iPhone 14'
+        fi
         exit 0
         ;;
 
@@ -536,16 +537,18 @@ case "$COMMAND" in
         ;;
 
     "test-tvos")
-        destination="Apple TV"
-        xc -scheme Realm -configuration "$CONFIGURATION" -sdk appletvsimulator -destination "name=$destination"
-        
+        if [ -z "$CI" ]; then
+            destination="Apple TV"
+            xctest Realm -configuration "$CONFIGURATION" -sdk appletvsimulator -destination "name=$destination"
+        fi
         exit $?
         ;;
 
     "test-tvos-swift")
-        destination="Apple TV"
-        xc -scheme RealmSwift -configuration "$CONFIGURATION" -sdk appletvsimulator -destination "name=$destination"
-        
+        if [ -z "$CI" ]; then
+            destination="Apple TV"
+            xctest RealmSwift -configuration "$CONFIGURATION" -sdk appletvsimulator -destination "name=$destination"
+        fi
         exit $?
         ;;
 
@@ -558,14 +561,18 @@ case "$COMMAND" in
         if [[ "$CONFIGURATION" == "Debug" ]]; then
             COVERAGE_PARAMS=(GCC_GENERATE_TEST_COVERAGE_FILES=YES GCC_INSTRUMENT_PROGRAM_FLOW_ARCS=YES)
         fi
-        xc -scheme Realm -configuration "$CONFIGURATION" "${COVERAGE_PARAMS[@]}" -destination "platform=macOS,arch=$(uname -m)"
+        
+        if [ -z "$CI" ]; then
+            xctest Realm -configuration "$CONFIGURATION" "${COVERAGE_PARAMS[@]}" -destination "platform=macOS,arch=$(uname -m)"
+        fi
         
         exit 0
         ;;
 
     "test-osx-swift")
-        xc -scheme RealmSwift -configuration "$CONFIGURATION" -destination "platform=macOS,arch=$(uname -m)"
-        
+        if [ -z "$CI" ]; then
+            xctest RealmSwift -configuration "$CONFIGURATION" -destination "platform=macOS,arch=$(uname -m)"
+        fi
         exit 0
         ;;
 
