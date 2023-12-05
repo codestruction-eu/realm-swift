@@ -34,7 +34,7 @@ install_dependencies() {
         gem install xcodeproj
     fi
 
-    if [[ "$CI_WORKFLOW" == *"package_15.1" ]] && [[ "$CI_PRODUCT_PLATFORM" == "visionOS" ]]; then
+    if [[ "$CI_WORKFLOW" == *"package_15.1" ]] && [[ "$CI_PRODUCT_PLATFORM" == "xrOS" ]]; then
         # We need to install the visionOS because is not installed by default in the XCode Cloud image, 
         # even if the build action selected platform is visionOS.
         echo "Installing visionos"
