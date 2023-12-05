@@ -508,7 +508,7 @@ case "$COMMAND" in
         if [ -z "$CI" ]; then
             xctest Realm -configuration "$CONFIGURATION" -sdk iphonesimulator -destination 'name=iPhone 14'
         else
-            ./scripts/download-core.sh
+            sh build.sh download-core
         fi
 
         exit 0
@@ -518,7 +518,7 @@ case "$COMMAND" in
         if [ -z "$CI" ]; then
             xctest RealmSwift -configuration "$CONFIGURATION" -sdk iphonesimulator -destination 'name=iPhone 11'
         else
-            ./scripts/download-core.sh
+            sh build.sh download-core
         fi
         
         exit 0
@@ -547,7 +547,7 @@ case "$COMMAND" in
             destination="Apple TV"
             xc -scheme Realm -configuration "$CONFIGURATION" -sdk appletvsimulator -destination "name=$destination"
         else
-            ./scripts/download-core.sh
+            sh build.sh download-core
         fi
         
         exit $?
@@ -558,7 +558,7 @@ case "$COMMAND" in
             destination="Apple TV"
             xc -scheme RealmSwift -configuration "$CONFIGURATION" -sdk appletvsimulator -destination "name=$destination"
         else
-            ./scripts/download-core.sh
+            sh build.sh download-core
         fi
         
         exit $?
@@ -577,7 +577,7 @@ case "$COMMAND" in
         if [ -z "$CI" ]; then
             xc -scheme Realm -configuration "$CONFIGURATION" "${COVERAGE_PARAMS[@]}" -destination "platform=macOS,arch=$(uname -m)"
         else
-            ./scripts/download-core.sh
+            sh build.sh download-core
         fi
         
         exit 0
@@ -587,7 +587,7 @@ case "$COMMAND" in
         if [ -z "$CI" ]; then
             xc -scheme RealmSwift -configuration "$CONFIGURATION" -destination "platform=macOS,arch=$(uname -m)"
         else
-            ./scripts/download-core.sh
+            sh build.sh download-core
         fi
         
         exit 0
