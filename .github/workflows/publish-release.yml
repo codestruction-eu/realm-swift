@@ -11,7 +11,6 @@ jobs:
           id: get-version
           run: |
             version="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${GITHUB_WORKSPACE}/dependencies.list")"
-            echo "-----> ${version}"
             echo "version=$version" >> $GITHUB_OUTPUT
         - uses: rickstaa/action-create-tag@v1
           id: "tag_create"
@@ -22,13 +21,12 @@ jobs:
   publish-docs:
       runs-on: macos-latest
       name: Publish docs to S3 Bucket
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       steps:
         - name: Checkout
           uses: actions/checkout@v4
-        - name: Export AWS Secrets to workspace
-          run: | 
-            echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
-            echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
         - name: Download docs and upload them to S3
           run: |
               ./build.sh publish-docs
@@ -45,6 +43,7 @@ jobs:
           uses: ruby/setup-ruby@ec02537da5712d66d4d50a0f33b7eb52773b5ed1
           with:
             ruby-version: '3.1.2'
+            bundler-cache: true
         - name: Install Gems
           run: |
             gem install octokit

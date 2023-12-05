@@ -29,10 +29,14 @@ if [ -n "${CI}" ]; then
     CODESIGN_PARAMS=(CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO)
 fi
 
-if [ -n "$CI" ]; then
+if [ -n "${CI}" ]; then
     DERIVED_DATA="$CI_DERIVED_DATA_PATH"
     ROOT_WORKSPACE="$CI_WORKSPACE"
     BRANCH="$CI_BRANCH"
+elif [ -n "${GITHUB_WORKSPACE}" ]; then
+    DERIVED_DATA="" # This can only be run on local or in XCode Cloud, never in Github actions
+    ROOT_WORKSPACE="$GITHUB_WORKSPACE"
+    BRANCH="$GITHUB_REF"
 else
     DERIVED_DATA="build/DerivedData/Realm"
     ROOT_WORKSPACE="$(pwd)"
@@ -1067,7 +1071,7 @@ case "$COMMAND" in
     "release_package-examples")
         ./scripts/package_examples.rb
         zip --symlinks -r realm-examples.zip examples -x "examples/installation/*"
-        ./scripts/github_prepare.rb --upload-product realm-examples.zip --path "${GITHUB_WORKSPACE}/realm-examples.zip"
+        ./scripts/github_prepare.rb --upload-product realm-examples.zip --path "${ROOT_WORKSPACE}/realm-examples.zip"
         ;;
 
     "release_package-docs")
@@ -1077,45 +1081,7 @@ case "$COMMAND" in
         ;;
 
     ("release_package")
-        XCODE_VERSION="$2"
-        PLATFORMS=$(./scripts/release-matrix.rb plaforms_for_version $XCODE_VERSION)
-        PLATFORMS_ARRAY=(${PLATFORMS//,/ })
-
-        # Package examples for package
-        ./scripts/package_examples.rb
-        zip --symlinks -r realm-examples.zip examples -x "examples/installation/*"
-
-        # Create frameworks for each platform and zip it
-        for platform in ${PLATFORMS_ARRAY[@]}; do
-            sh build.sh "$platform-swift"
-            if [[ "$platform" == ios ]]; then
-                sh build.sh "$platform-static"
-            else
-                mkdir -p build/Static
-            fi
-
-            FILE_NAME="realm-${platform}-${XCODE_VERSION}"
-            zip --symlinks -r "${FILE_NAME}.zip" "Release/${platform}" "Static/${platform}"
-        done
-
-        # Create Realm(Static)/RealmSwift XCFrameworks zips combining all the platforms frameworks
-        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${source_root}/dependencies.list")"
-        find . -name 'realm-*-1*.zip' -maxdepth 1 \
-            | sed 's@./realm-[a-z]*-\(.*\).zip@\1@' \
-            | sort -u --version-sort \
-            | xargs ./scripts/create-release-package.rb create-version-xcframeworks "${ROOT_WORKSPACE}/pkg" "${VERSION}" "${XCODE_VERSION}"
-        
-
-        echo "Uploading data into draft release"
-        # Upload RealmSwift zips to draft release
-        ./scripts/github_prepare.rb --upload-product "realm-swift-${VERSION}_${XCODE_VERSION}.zip" --path "${ROOT_WORKSPACE}/pkg/realm-swift-${VERSION}_${XCODE_VERSION}.zip"
-        ./scripts/github_prepare.rb --upload-product "RealmSwift@${XCODE_VERSION}.spm.zip" --path "${ROOT_WORKSPACE}/pkg/RealmSwift@${XCODE_VERSION}.spm.zip"
-
-        # Upload Realm zips to draft release, only for latest xcode version
-        if [ -f "${ROOT_WORKSPACE}/pkg/Realm.spm.zip" ]; then 
-            ./scripts/github_prepare.rb --upload-product "Realm.spm.zip" --path "${ROOT_WORKSPACE}/pkg/Realm.spm.zip"
-            ./scripts/github_prepare.rb --upload-product "Carthage.xcframework.zip" --path "${ROOT_WORKSPACE}/pkg/Carthage.xcframework.zip"
-        fi
+        set_configuration_for_distribution
         ;;
 
     ("release_package-all")
@@ -1126,14 +1092,14 @@ case "$COMMAND" in
         # Download RealmSwift.xcframework/Realm.xcframework for each xcode version and pack it in a package containig all of them, created in the prepare step.
         file_name=realm-swift-${VERSION}
         for xcode_version in ${XCODE_VERSIONS_ARRAY[@]}; do
-            ./scripts/github_prepare.rb --download-asset "${file_name}_${xcode_version}.zip" --path "${GITHUB_WORKSPACE}/${file_name}_${xcode_version}.zip"
+            ./scripts/github_prepare.rb --download-asset "${file_name}_${xcode_version}.zip" --path "${ROOT_WORKSPACE}/${file_name}_${xcode_version}.zip"
 
             unzip -o "${file_name}_${xcode_version}.zip"
         done
 
         zip --symlinks -r "${ROOT_WORKSPACE}/${file_name}.zip" "${file_name}"
 
-        ./scripts/github_prepare.rb --upload-product "${file_name}.zip" --path "${GITHUB_WORKSPACE}/${file_name}.zip"
+        ./scripts/github_prepare.rb --upload-product "${file_name}.zip" --path "${ROOT_WORKSPACE}/${file_name}.zip"
         ;;
 
     ("release_test-package-examples")
@@ -1255,7 +1221,7 @@ case "$COMMAND" in
         ;;
 
     "publish-github")
-        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${GITHUB_WORKSPACE}/dependencies.list")"
+        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${ROOT_WORKSPACE}/dependencies.list")"
         XCODE_VERSIONS=$(./scripts/release-matrix.rb xcode_versions)
         XCODE_VERSIONS_ARRAY=(${XCODE_VERSIONS//,/ })
 
@@ -1265,35 +1231,35 @@ case "$COMMAND" in
 
         # Download realm-swift-${VERSION} package
         package_file_name=realm-swift-${VERSION}.zip
-        ./scripts/github_prepare.rb --download-asset "${package_file_name}" --path "${GITHUB_WORKSPACE}/${package_dir}/${package_file_name}"
+        ./scripts/github_prepare.rb --download-asset "${package_file_name}" --path "${ROOT_WORKSPACE}/${package_dir}/${package_file_name}"
 
         # Download SPM files for each xcode version, created in the prepare step.
         for xcode_version in ${XCODE_VERSIONS_ARRAY[@]}; do
             spm_file_name=RealmSwift@${xcode_version}.spm.zip
-            ./scripts/github_prepare.rb --download-asset "${spm_file_name}" --path "${GITHUB_WORKSPACE}/${package_dir}/${spm_file_name}"
+            ./scripts/github_prepare.rb --download-asset "${spm_file_name}" --path "${ROOT_WORKSPACE}/${package_dir}/${spm_file_name}"
         done
 
         # Download the Obj-C xcframework created in the prepare step.
         realm_file_name=Realm.spm.zip
-        ./scripts/github_prepare.rb --download-asset "${realm_file_name}" --path "${GITHUB_WORKSPACE}/${package_dir}/${realm_file_name}"
+        ./scripts/github_prepare.rb --download-asset "${realm_file_name}" --path "${ROOT_WORKSPACE}/${package_dir}/${realm_file_name}"
 
         # Download the Carthage xcframework
         carthage_file_name=Carthage.xcframework.zip
-        ./scripts/github_prepare.rb --download-asset "${carthage_file_name}" --path "${GITHUB_WORKSPACE}/${package_dir}/${carthage_file_name}"
+        ./scripts/github_prepare.rb --download-asset "${carthage_file_name}" --path "${ROOT_WORKSPACE}/${package_dir}/${carthage_file_name}"
 
         # Prepare version for
         ./scripts/github_release.rb create-release "$VERSION"
         ;;
 
     "publish-docs")
-        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${GITHUB_WORKSPACE}/dependencies.list")"
+        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${ROOT_WORKSPACE}/dependencies.list")"
         PRERELEASE_REGEX='alpha|beta|rc|preview'
         if [[ $VERSION =~ $PRERELEASE_REGEX ]]; then
           exit 0
         fi
 
         # Download docs from the draft release
-        ./scripts/github_prepare.rb --download-asset "realm-docs.zip" --path "${GITHUB_WORKSPACE}/realm-docs.zip"
+        ./scripts/github_prepare.rb --download-asset "realm-docs.zip" --path "${ROOT_WORKSPACE}/realm-docs.zip"
 
         unzip realm-docs.zip
 
@@ -1305,7 +1271,7 @@ case "$COMMAND" in
         ;;
 
     "publish-update-checker")
-        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${GITHUB_WORKSPACE}/dependencies.list")"
+        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${ROOT_WORKSPACE}/dependencies.list")"
         PRERELEASE_REGEX='alpha|beta|rc|preview'
         if [[ $VERSION =~ $PRERELEASE_REGEX ]]; then
           exit 0
@@ -1317,13 +1283,13 @@ case "$COMMAND" in
         ;;
 
     "publish-cocoapods")
-        cd "${GITHUB_WORKSPACE}"
+        cd "${ROOT_WORKSPACE}"
         pod trunk push Realm.podspec --verbose --allow-warnings
         pod trunk push RealmSwift.podspec --verbose --allow-warnings --synchronous
         ;;
 
     "prepare-publish-changelog")
-        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${GITHUB_WORKSPACE}/dependencies.list")"
+        VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${ROOT_WORKSPACE}/dependencies.list")"
         ./scripts/github_release.rb package-release-notes "$VERSION"
         ;;
 
