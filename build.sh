@@ -213,6 +213,11 @@ set_configuration_for_distribution() {
     sed -i '' "s/REALM_BUILD_LIBRARY_FOR_DISTRIBUTION = NO;/REALM_BUILD_LIBRARY_FOR_DISTRIBUTION = YES;/" "$filename"
 }
 
+set_hide_symbols() {
+    filename="Configuration/Release.xcconfig"
+    sed -i '' "s/REALM_HIDE_SYMBOLS = NO;/REALM_HIDE_SYMBOLS = YES;/" "$filename"
+}
+
 clean_retrieve() {
     mkdir -p "$2"
     rm -rf "$2/$3"
@@ -1105,6 +1110,7 @@ case "$COMMAND" in
         ;;
 
     (release-package_*)
+        set_hide_symbols
         exit 0
         ;;
 
