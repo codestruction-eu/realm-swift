@@ -1104,7 +1104,7 @@ case "$COMMAND" in
         ./scripts/github_prepare.rb --upload-product realm-docs.zip --path "${ROOT_WORKSPACE}/docs/realm-docs.zip"
         ;;
 
-    ("release_package")
+    (release-package_*)
         exit 0
         ;;
 
