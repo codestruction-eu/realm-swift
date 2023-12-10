@@ -55,7 +55,7 @@ jobs:
               path: realm-examples.zip
   build-product:
       runs-on: ubuntu-latest
-      name: Package product for platform ${{ matrix.platform }}, xcode version ${{ matrix.xcode-version }} and configuration ${{ matrix.configuration }}.
+      name: Package product for platform ${{ matrix.platform }}, target ${{ matrix.target }}, xcode version ${{ matrix.xcode-version }} and configuration ${{ matrix.configuration }}.
       needs: prepare
       strategy:
         matrix:
@@ -64,6 +64,22 @@ jobs:
           xcode-version: ${{ fromJSON(needs.prepare.outputs.XCODE_VERSIONS_MATRIX) }}
           configuration: [release]
           include: 
+            - platform: ios
+              target: realm
+              xcode-version: 14.1
+              configuration: static
+            - platform: ios
+              target: realm
+              xcode-version: 14.2
+              configuration: static
+            - platform: ios
+              target: realm
+              xcode-version: 14.3.1
+              configuration: static
+            - platform: ios
+              target: realm
+              xcode-version: 15.0.1
+              configuration: static
             - platform: ios
               target: realm
               xcode-version: 15.1
@@ -107,7 +123,7 @@ jobs:
           - name: Upload artifact to artifacts library
             uses: actions/upload-artifact@v3
             with:
-              name: package-${{ matrix.platform }}-${{ matrix.xcode-version }}-${{ matrix.configuration }}.zip
+              name: package-${{ matrix.platform }}-${{ matrix.xcode-version }}-${{ matrix.target }}-${{ matrix.configuration }}.zip
               path: product.zip
   build-package:
       runs-on: macos-latest

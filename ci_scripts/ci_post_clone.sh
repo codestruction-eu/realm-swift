@@ -11,7 +11,6 @@ COCOAPODS_VERSION="1.14.2"
 install_dependencies() {
     echo ">>> Installing dependencies for ${CI_WORKFLOW}"
 
-    brew install moreutils
     if [[ "$CI_WORKFLOW" == "docs"* ]]; then
         install_ruby
         gem install jazzy -v ${JAZZY_VERSION}
