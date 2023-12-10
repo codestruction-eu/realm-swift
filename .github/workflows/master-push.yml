@@ -3,45 +3,39 @@ on:
   push:
     branches:
       - "master"
+env:
+  XCODE_VERSION: ('14.1' '14.2' '14.3.1' '15.0.1' '15.1')
+  PLATFORM: ('ios', 'osx', 'watchos', 'tvos', 'catalyst')  
+  DOC_VERSION: '14.3.1'
 jobs:
   prepare:
       runs-on: ubuntu-latest
       name: Create Draft Release to store artifacts
+      outputs:
+        XCODE_VERSIONS_MATRIX: ${{ env.XCODE_VERSION }}
+        PLATFORM_MATRIX: ${{ env.PLATFORM }}
       steps:
-          - name: Checkout
-            uses: actions/checkout@v4
-          - name: Export GITHUB_TOKEN to workspace
-            run: echo "GITHUB_ACCESS_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
-          - name: Install ruby
-            uses: ruby/setup-ruby@ec02537da5712d66d4d50a0f33b7eb52773b5ed1
-            with:
-              ruby-version: '3.1.2'
-          - name: Install Gems
-            run: |
-              gem install octokit
-          - name: Create draft release to store artifacts.
-            run: ruby ./scripts/github_release.rb create-draft-release
+        - name: Compute outputs
+          run: |
+            echo "XCODE_VERSIONS_MATRIX=${{ env.XCODE_VERSION }}" >> $GITHUB_OUTPUT
+            echo "PLATFORM_MATRIX=${{ env.PLATFORM }}" >> $GITHUB_OUTPUT
   build-docs:
-      runs-on: ubuntu-latest
+      runs-on: macos-latest
       name: Package docs and upload them to the draft release
       needs: prepare
       steps:
-          - name: Checkout
-            uses: actions/checkout@v4
-          - name: Get Token
-            id: token
-            uses: yuki0n0/action-appstoreconnect-token@v1.0
-            with:
-                # UUID. Can get from App Store Connect.
-                issuer id: ${{ secrets.APPLE_STORE_CONNECT_ISSUER_ID }}
-                # Key ID. Can get from App Store Connect.
-                key id: ${{ secrets.APPLE_STORE_CONNECT_KEY_ID }}
-                # P8 private key. Can get from App Store Connect.
-                key:  ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
-          - name: Run release_package-docs xcode cloud build and wait for it to finish, this xcode cloud upload realm-docs.zip assets to the artifacts draft release
-            run: |
-              XCODE_VERSION="$(ruby ./scripts/release-matrix.rb docs_version)"
-              ruby ./scripts/xcode_cloud_helper.rb --run-release-workflow "release_package-docs_${XCODE_VERSION}" --token ${{ steps.token.outputs.token }}
+        - uses: maxim-lobanov/setup-xcode@v1
+          with:
+            xcode-version: ${{ env.DOC_VERSION }}
+        - name: Checkout
+          uses: actions/checkout@v4
+        - name: Package docs files 
+          run: ./build.sh release_package-docs
+        - name: Upload artifact to artifacts library
+          uses: actions/upload-artifact@v3
+          with:
+            name: realm-docs.zip
+            path: docs/realm-docs.zip
   build-examples:
       runs-on: macos-latest
       name: Package examples and upload them to the draft release
@@ -63,11 +57,19 @@ jobs:
             run: ./build.sh release_package-examples
   build-product:
       runs-on: ubuntu-latest
-      name: Package product for each xcode version.
-      needs: build-examples
+      name: Package product for platform ${{ matrix.platform }}, xcode version ${{ matrix.xcode-version }} and configuration ${{ matrix.configuration }}.
+      needs: prepare
       strategy:
         matrix:
-          xcode-version: ['14.1', '14.2', '14.3.1', '15.0.1', '15.1']
+          platform: ${{ needs.prepare.outputs.XCODE_VERSIONS_MATRIX }}
+          target: [realm, realmswift]
+          xcode-version: ${{ needs.prepare.outputs.XCODE_VERSIONS_MATRIX }}
+          configuration: [Release]
+          include: 
+            - platform: ios
+              configuration: static
+            - platform: visionos
+              xcode-version: '15.1'
       steps:
           - name: Checkout
             uses: actions/checkout@v4
@@ -75,14 +77,32 @@ jobs:
             id: token
             uses: yuki0n0/action-appstoreconnect-token@v1.0
             with:
-                # UUID. Can get from App Store Connect.
-                issuer id: ${{ secrets.APPLE_STORE_CONNECT_ISSUER_ID }}
-                # Key ID. Can get from App Store Connect.
-                key id: ${{ secrets.APPLE_STORE_CONNECT_KEY_ID }}
-                # P8 private key. Can get from App Store Connect.
-                key:  ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
-          - name: Run release_package_${{ matrix.xcode-version }} which upload the package to the draft release and wait for it to complete or fail
-            run: ruby ./scripts/xcode_cloud_helper.rb --run-release-workflow "release_package_${{ matrix.xcode-version }}" --token ${{ steps.token.outputs.token }}
+              # UUID. Can get from App Store Connect.
+              issuer id: ${{ secrets.APPLE_STORE_CONNECT_ISSUER_ID }}
+              # Key ID. Can get from App Store Connect.
+              key id: ${{ secrets.APPLE_STORE_CONNECT_KEY_ID }}
+              # P8 private key. Can get from App Store Connect.
+              key:  ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
+          - name: Creates on demand XCode Cloud's workflows with a build action for ${{ matrix.platform }} in ${{ matrix.xcode-version }} with configuration ${{ matrix.configuration }}
+            id: create-workflow
+            run: |
+              workflow_id=$(echo $(ruby ./scripts/xcode_cloud_helper.rb --create-build-workflow "${{ matrix.platform }}-${{ matrix.target }}-${{ matrix.configuration }}" --token ${{ steps.token.outputs.token }} --xcode-version ${{ matrix.xcode-version }}))
+              echo "WORKFLOW_ID=$workflow_id" >> $GITHUB_OUTPUT
+          - name: Runs the XCode Cloud workflow created by the prevous step which that a package for ${{ matrix.platform }} in ${{ matrix.xcode-version }} with configuration ${{ matrix.configuration }}
+            id: build_run
+            run: |
+              build_run_id=$(echo $(ruby ./scripts/xcode_cloud_helper.rb --run-release-workflow ${{ steps.create-workflow.outputs.WORKFLOW_ID }} --token ${{ steps.token.outputs.token }} --branch ${GITHUB_REF##*/}))
+              echo "BUILD_RUN_ID=$build_run_id" >> $GITHUB_OUTPUT
+          - name: Check build status and wait for it to finish
+            run: |
+              ruby ./scripts/xcode_cloud_helper.rb --token ${{ steps.token.outputs.token }} --check-workflow-status ${{ steps.build_run.outputs.BUILD_RUN_ID }}
+          - name: Download package from XCode Cloud artifacts ${{ matrix.platform }} in ${{ matrix.xcode-version }} with configuration ${{ matrix.configuration }}
+            run: ruby ./scripts/xcode_cloud_helper.rb --download-build-artifact ${{ steps.build_run.outputs.BUILD_RUN_ID }} --token ${{ steps.token.outputs.token }}
+          - name: Upload artifact to artifacts library
+            uses: actions/upload-artifact@v3
+            with:
+              name: package-${{ matrix.platform }}-${{ matrix.xcode-version }}-${{ matrix.configuration }}.zip
+              path: product.zip
   build-package:
       runs-on: macos-latest
       name: Package products for all xcode version into a single package.
