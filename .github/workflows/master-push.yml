@@ -4,8 +4,8 @@ on:
     branches:
       - "master"
 env:
-  XCODE_VERSION: ('14.1' '14.2' '14.3.1' '15.0.1' '15.1')
-  PLATFORM: ('ios', 'osx', 'watchos', 'tvos', 'catalyst')  
+  XCODE_VERSION: "['14.1', '14.2', '14.3.1', '15.0.1', '15.1']"
+  PLATFORM: "['ios', 'iossimulator', 'osx', 'watchos', 'watchossimulator', 'tvos', 'tvossimulator', 'catalyst']"
   DOC_VERSION: '14.3.1'
 jobs:
   prepare:
@@ -59,9 +59,9 @@ jobs:
       needs: prepare
       strategy:
         matrix:
-          platform: ${{ needs.prepare.outputs.XCODE_VERSIONS_MATRIX }}
+          platform: ${{ fromJSON(needs.prepare.outputs.PLATFORM_MATRIX) }}
           target: [realm, realmswift]
-          xcode-version: ${{ needs.prepare.outputs.XCODE_VERSIONS_MATRIX }}
+          xcode-version: ${{ fromJSON(needs.prepare.outputs.XCODE_VERSIONS_MATRIX) }}
           configuration: [Release]
           include: 
             - platform: ios
@@ -89,7 +89,7 @@ jobs:
           - name: Runs the XCode Cloud workflow created by the prevous step which that a package for ${{ matrix.platform }} in ${{ matrix.xcode-version }} with configuration ${{ matrix.configuration }}
             id: build_run
             run: |
-              build_run_id=$(echo $(ruby ./scripts/xcode_cloud_helper.rb --run-release-workflow ${{ steps.create-workflow.outputs.WORKFLOW_ID }} --token ${{ steps.token.outputs.token }} --branch ${GITHUB_REF##*/}))
+              build_run_id=$(echo $(ruby ./scripts/xcode_cloud_helper.rb --run-release-workflow ${{ steps.create-workflow.outputs.WORKFLOW_ID }} --token ${{ steps.token.outputs.token }} --branch ${{ github.ref_name }}))
               echo "BUILD_RUN_ID=$build_run_id" >> $GITHUB_OUTPUT
           - name: Check build status and wait for it to finish
             run: |
