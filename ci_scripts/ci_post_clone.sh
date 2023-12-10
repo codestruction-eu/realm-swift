@@ -12,7 +12,7 @@ install_dependencies() {
     echo ">>> Installing dependencies for ${CI_WORKFLOW}"
 
     brew install moreutils
-    if [[ "$CI_WORKFLOW" == "docs"* ]] || [[ "$CI_WORKFLOW" == *"docs"* ]]; then
+    if [[ "$CI_WORKFLOW" == "docs"* ]]; then
         install_ruby
         gem install jazzy -v ${JAZZY_VERSION}
     elif [[ "$CI_WORKFLOW" == "swiftlint"* ]]; then
@@ -24,14 +24,6 @@ install_dependencies() {
         install_ruby
     elif [[ "$CI_WORKFLOW" == *"carthage"* ]]; then
         brew install carthage
-    fi
-
-    if [[ "$CI_WORKFLOW" == "release"* ]]; then
-        echo "Installing release gems"
-        install_ruby
-        gem install octokit
-        gem install getoptlong
-        gem install xcodeproj
     fi
 
     if [[ "$CI_WORKFLOW" == *"package_15.1" ]] && [[ "$CI_PRODUCT_PLATFORM" == "xrOS" ]]; then
