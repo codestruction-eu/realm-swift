@@ -373,13 +373,35 @@ def get_action_for_target(type, name)
     when 'watchos'
         platform_name = 'watchOS'
         build_platform = 'WATCHOS'
-        test_destination = nil
+        test_destination = {
+            "deviceTypeName" => "Recommended Apple Watches",
+            "deviceTypeIdentifier" =>  "recommended_apple_watches",
+            "runtimeName" =>  "Latest from Selected Xcode (watchOS 10.0)",
+            "runtimeIdentifier" =>  "default",
+            "kind" =>  "SIMULATOR"
+        }
         destination = 'ANY_WATCHOS_DEVICE'
     when 'watchossimulator'
         platform_name = 'watchOS Simulator'
         build_platform = 'WATCHOS'
-        test_destination = nil
+        test_destination = {
+            "deviceTypeName" => "Recommended Apple Watches",
+            "deviceTypeIdentifier" =>  "recommended_apple_watches",
+            "runtimeName" =>  "Latest from Selected Xcode (watchOS 10.0)",
+            "runtimeIdentifier" =>  "default",
+            "kind" =>  "SIMULATOR"
+        }
         destination = 'ANY_WATCHOS_SIMULATOR'
+    when 'visionos'
+        platform_name = 'visionOS'
+        build_platform = 'VISIONOS'
+        test_destination = nil
+        destination = 'ANY_VISIONOS_DEVICE'
+    when 'visionossimulator'
+        platform_name = 'visionOS Simulator'
+        build_platform = 'VISIONOS'
+        test_destination = nil
+        destination = 'ANY_VISIONOS_SIMULATOR'
     else # docs, swiftlint, cocoapods, swiftpm, spm, xcframework, objectserver, watchos
 
     end

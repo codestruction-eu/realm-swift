@@ -62,12 +62,20 @@ jobs:
           platform: ${{ fromJSON(needs.prepare.outputs.PLATFORM_MATRIX) }}
           target: [realm, realmswift]
           xcode-version: ${{ fromJSON(needs.prepare.outputs.XCODE_VERSIONS_MATRIX) }}
-          configuration: [Release]
+          configuration: [release]
           include: 
             - platform: ios
+              target: realm
+              xcode-version: 15.1
               configuration: static
             - platform: visionos
-              xcode-version: '15.1'
+              target: realm
+              xcode-version: 15.1
+              configuration: release
+            - platform: visionos
+              target: realmswift
+              xcode-version: 15.1
+              configuration: release
       steps:
           - name: Checkout
             uses: actions/checkout@v4
