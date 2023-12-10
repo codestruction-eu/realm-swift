@@ -1107,7 +1107,7 @@ case "$COMMAND" in
         zip -r docs/realm-docs.zip docs/objc_output docs/swift_output
         ;;
 
-    (release-package_*)
+    (release_package-*)
         set_hide_symbols
         exit 0
         ;;

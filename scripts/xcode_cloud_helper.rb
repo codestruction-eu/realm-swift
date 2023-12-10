@@ -1099,7 +1099,7 @@ elsif option == '--create-build-workflow'
     if name == '' || xcode_version == ''
         raise 'Needs name and xcode version'
     else
-        workflow_id = create_workflow('build', name, xcode_version, "release-package_")
+        workflow_id = create_workflow('build', name, xcode_version, "release_package-")
         puts workflow_id
     end
 elsif option == '--download-build-artifact'
