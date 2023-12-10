@@ -1100,13 +1100,11 @@ case "$COMMAND" in
     "release_package-examples")
         ./scripts/package_examples.rb
         zip --symlinks -r realm-examples.zip examples -x "examples/installation/*"
-        ./scripts/github_prepare.rb --upload-product realm-examples.zip --path "${ROOT_WORKSPACE}/realm-examples.zip"
         ;;
 
     "release_package-docs")
         sh build.sh docs
         zip -r docs/realm-docs.zip docs/objc_output docs/swift_output
-        ./scripts/github_prepare.rb --upload-product realm-docs.zip --path "${ROOT_WORKSPACE}/docs/realm-docs.zip"
         ;;
 
     (release-package_*)
