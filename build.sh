@@ -31,12 +31,8 @@ fi
 
 if [ -n "$CI" ]; then
     DERIVED_DATA="$CI_DERIVED_DATA_PATH"
-    ROOT_WORKSPACE="$CI_WORKSPACE/"
-    BRANCH="$CI_BRANCH"
 else
     DERIVED_DATA="build/DerivedData/Realm"
-    ROOT_WORKSPACE=""
-    BRANCH="$(git branch --show-current)"
 fi
 
 usage() {
@@ -1028,7 +1024,7 @@ case "$COMMAND" in
         elif [ "$target" = "swiftlint" ]; then
             sh build.sh verify-swiftlint
         else
-            export sha="$BRANCH"
+            export sha="$CI_BRANCH"
             export REALM_EXTRA_BUILD_ARGUMENTS='GCC_GENERATE_DEBUGGING_SYMBOLS=NO -allowProvisioningUpdates'
 
             if [[ "$target" = *"server"* ]] || [[ "$target" = "swiftpm"* ]]; then
