@@ -1440,19 +1440,6 @@ case "$COMMAND" in
         sh build.sh examples-tvos-swift
         ;;
 
-    "test-package")
-        PLATFORM="$2"
-        sh build.sh "$PLATFORM-swift"
-        if [[ "$PLATFORM" == ios ]]; then
-            sh build.sh "$PLATFORM-static"
-        else
-            mkdir -p Static
-        fi
-
-        cd build
-        zip --symlinks -r "realm-$PLATFORM-$REALM_XCODE_VERSION.zip" "Release/$PLATFORM" "Static/$PLATFORM"
-        ;;
-
     ######################################
     # Publish
     ######################################

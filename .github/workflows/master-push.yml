@@ -63,6 +63,8 @@ jobs:
         - uses: maxim-lobanov/setup-xcode@v1
           with:
             xcode-version: ${{ env.DOC_VERSION }}
+        - name: Prepare docs for packaging
+          run: .sh -x build.sh release-package-docs
         - name: Upload docs to artifacts library
           uses: actions/upload-artifact@v3
           with:
@@ -75,8 +77,8 @@ jobs:
       steps:
           - name: Checkout
             uses: actions/checkout@v4
-          - name: Run release_package-examples package and uploads the example folder
-            run: ./build.sh release-package-examples
+          - name: Prepare examples for packaging
+            run: sh -x build.sh release-package-examples
           - name: Cache examples
             uses: actions/cache/save@v3
             with:
@@ -381,7 +383,7 @@ jobs:
           with:
             name: Carthage.xcframework
             path: Carthage.xcframework.zip
-  create-final-package: # Cretes a release package for each xcode version
+  create-final-package: # Cretes a final package
       runs-on: macos-13
       name: Package final package
       needs: [create-package-version, prepare]
@@ -446,7 +448,7 @@ jobs:
         - uses: maxim-lobanov/setup-xcode@v1
           with:
             xcode-version: ${{ env.TEST_VERSION }}
-        - name: Restore release for 15.1
+        - name: Restore release
           uses: actions/cache/restore@v3
           with:
             path: |
