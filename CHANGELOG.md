@@ -11,6 +11,9 @@ x.y.z Release notes (yyyy-MM-dd)
   `Sendable` annotations ([PR #8435](https://github.com/realm/realm-swift/pull/8435)).
 * `Realm.Error.subscriptionFailed` was reported with the incorrect error
   domain, making it impossible to catch (since v10.42.2, [PR #8435](https://github.com/realm/realm-swift/pull/8435)).
+* `@Persisted`'s Encodable implementation did not allow the encoder to
+  customize the encoding of values, which broke things like JSONEncoder's
+  `dateEncodingStrategy` ([#8425](https://github.com/realm/realm-swift/issues/8425)).
 
 ### Compatibility
 * Realm Studio: 14.0.1 or later.
