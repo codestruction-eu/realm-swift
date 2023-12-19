@@ -76,6 +76,8 @@ def copy_xcframework(path, framework, dir = '')
   if not Dir.exist? source
     raise "Missing XCFramework to test at '#{source}'"
   end
+
+  puts "Copying xcframework from #{source} into ../../build/#{dir}"
   sh 'cp', '-cR', source, "../../build/#{dir}"
 end
 
@@ -160,7 +162,7 @@ def download_realm(platform, method, static)
       download_release version
     else
       if static
-        copy_xcframework "../../build/Static/#{platform}", 'Realm'
+        copy_xcframework "../../build/Static/#{platform}", 'Realm', 'Static'
       else
         copy_xcframework "../../build/Release/#{platform}", 'Realm'
         copy_xcframework "../../build/Release/#{platform}", 'RealmSwift'
@@ -227,7 +229,7 @@ def test(platform, method, linkage = 'dynamic')
     ENV.delete 'REALM_BUILD_STATIC'
   end
 
-  puts "Testing #{method} for #{platform}"
+  puts "Testing #{method} for #{platform} and #{linkage}"
 
   download_realm(platform, method, static)
   build_app(platform, method, static)
