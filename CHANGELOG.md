@@ -1,6 +1,8 @@
-x.y.z Release notes (yyyy-MM-dd)
+10.46.0-beta1 Release notes (2023-12-19)
 =============================================================
+
 ### Enhancements
+
 * Expose waiting for upload/download on SyncSession, which will suspend
   the current method (or call an asynchronous block) until an upload or download
   completes for a given sync session, e.g.,:
@@ -14,13 +16,8 @@ x.y.z Release notes (yyyy-MM-dd)
   and should be used as such. However, there are special cases (notable in 
   testing) where this may be used.
 
-### Fixed
-* <How to hit and notice issue? what was the impact?> ([#????](https://github.com/realm/realm-swift/issues/????), since v?.?.?)
-* None.
-
-<!-- ### Breaking Changes - ONLY INCLUDE FOR NEW MAJOR version -->
-
 ### Compatibility
+
 * Realm Studio: 14.0.1 or later.
 * APIs are backwards compatible with all previous releases in the 10.x.y series.
 * Carthage release for Swift is built with Xcode 15.0.0.
@@ -28,7 +25,7 @@ x.y.z Release notes (yyyy-MM-dd)
 * Xcode: 14.1-15.0.0.
 
 ### Internal
-* Upgraded realm-core from ? to ?
+
 * Migrated our current CI Pipelines to Xcode Cloud.
 
 10.44.0 Release notes (2023-10-29)
