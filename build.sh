@@ -1255,20 +1255,6 @@ case "$COMMAND" in
         exit 0
         ;;
 
-    (release-build_*)
-        set_hide_symbols
-
-        build_command=${COMMAND#"release-build_"}
-        parameters=(${build_command//-/ })
-
-        platform=${parameters[0]}
-        xcode_version=${parameters[1]}
-        target=${parameters[2]}
-
-        build_platform "$target" "$platform" "$xcode_version"
-        exit 0
-        ;;
-
     (release-create-xcframework_*)
         platform="$2"
         xcode_version=$(echo "$COMMAND" | cut -d_ -f2 ) 
@@ -1438,6 +1424,21 @@ case "$COMMAND" in
         sh build.sh examples-osx
         sh build.sh examples-ios-swift
         sh build.sh examples-tvos-swift
+        ;;
+
+     # This is used for test or if we want to use Github Actions to build each framework
+    (release-build_*)
+        set_hide_symbols
+
+        build_command=${COMMAND#"release-build_"}
+        parameters=(${build_command//-/ })
+
+        platform=${parameters[0]}
+        xcode_version=${parameters[1]}
+        target=${parameters[2]}
+
+        build_platform "$target" "$platform" "$xcode_version"
+        exit 0
         ;;
 
     ######################################
