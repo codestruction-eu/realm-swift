@@ -64,7 +64,7 @@ jobs:
           with:
             xcode-version: ${{ env.DOC_VERSION }}
         - name: Prepare docs for packaging
-          run: .sh -x build.sh release-package-docs
+          run: sh -x build.sh release-package-docs
         - name: Upload docs to artifacts library
           uses: actions/upload-artifact@v3
           with:
@@ -405,7 +405,7 @@ jobs:
             path: |
               realm-swift-${{ needs.prepare.outputs.VERSION }}-14.2.zip
             key: realm-swift-${{ needs.prepare.outputs.VERSION }}-14.2
-        - name: Restore elease for 14.3.1
+        - name: Restore release for 14.3.1
           uses: actions/cache/restore@v3
           with:
             path: |
