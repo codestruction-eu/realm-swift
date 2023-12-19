@@ -2,8 +2,6 @@
 
 require 'pathname'
 require 'octokit'
-require 'uri'
-require 'open-uri'
 require 'fileutils'
 
 VERSION = ARGV[1]
