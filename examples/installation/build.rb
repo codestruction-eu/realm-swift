@@ -160,10 +160,10 @@ def download_realm(platform, method, static)
       download_release version
     else
       if static
-        copy_xcframework "../../build/Static/#{platform}", 'Realm'
+        copy_xcframework "../../build/Static", 'Realm'
       else
-        copy_xcframework "../../build/Release/#{platform}", 'Realm'
-        copy_xcframework "../../build/Release/#{platform}", 'RealmSwift'
+        copy_xcframework "../../build/Release", 'Realm'
+        copy_xcframework "../../build/Release", 'RealmSwift'
       end
     end
 
