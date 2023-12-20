@@ -140,7 +140,7 @@ jobs:
         - name: Get Token
           id: token
           run: |
-            token=$(echo $(ruby ./scripts/xcode_cloud_helper.rb --issuer-id ${{ secrets.APPLE_STORE_CONNECT_ISSUER_ID }} --key-id ${{ secrets.APPLE_STORE_CONNECT_KEY_ID }} --pk ${{ secrets.APPLE_STORE_CONNECT_API_KEY }} get-token))
+            token=$(echo $(ruby ./scripts/xcode_cloud_helper.rb --issuer-id ${{ secrets.APPLE_STORE_CONNECT_ISSUER_ID }} --key-id ${{ secrets.APPLE_STORE_CONNECT_KEY_ID }} --pk "${{ secrets.APPLE_STORE_CONNECT_API_KEY }}" get-token))
             echo "TOKEN=$token" >> $GITHUB_OUTPUT
         - name: Creates on demand XCode Cloud's workflows with a build action for ${{ matrix.platform }} in ${{ matrix.xcode-version }} with configuration ${{ matrix.configuration }}
           id: create-workflow
