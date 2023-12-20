@@ -326,8 +326,7 @@ end
 def wait_build(build_run)
     begin
         build_state = get_build_info(build_run)
-        result = JSON.parse(build_state)
-        status = result["data"]["attributes"]["executionProgress"]
+        status = build_state["data"]["attributes"]["executionProgress"]
         puts "Current status #{status}"
         puts 'Waiting'
         if status == 'COMPLETE'
@@ -336,8 +335,7 @@ def wait_build(build_run)
     end until completed == true or not sleep 20
     
     build_state = get_build_info(build_run)
-    result = JSON.parse(build_state)
-    completion_status = result["data"]["attributes"]["completionStatus"]
+    completion_status = build_state["data"]["attributes"]["completionStatus"]
     get_logs_for_build(build_run)
     if completion_status != 'SUCCEEDED'
        puts "Completion status #{completion_status}"
@@ -352,8 +350,7 @@ def get_logs_for_build(build_run)
     artifact_url = ''
     artifacts.each { |artifact| 
         artifact_info = get_artifact_info(artifact['id'])
-        result = JSON.parse(artifact_info)
-        if result["data"]["attributes"]["fileName"].include? 'Logs' 
+        if artifact_info["data"]["attributes"]["fileName"].include? 'Logs' 
             artifact_url = result["data"]["attributes"]["downloadUrl"]
         end
     }
@@ -392,9 +389,8 @@ def download_artifact_for_build(build_id_run)
     artifact_url = ''
     artifacts.each { |artifact| 
         artifact_info = get_artifact_info(artifact['id'])
-        result = JSON.parse(artifact_info)
         if result["data"]["attributes"]["fileName"].include? 'Products' 
-            artifact_url = result["data"]["attributes"]["downloadUrl"]
+            artifact_url = artifact_info["data"]["attributes"]["downloadUrl"]
         end
     }
 
