@@ -535,7 +535,7 @@ when 'build-workflow'
     branch = ARGV.shift
     usage unless workflow_id
     id = start_build(workflow_id, branch)
-    pp id
+    puts id
 when 'create-release-workflow'
     platform = ARGV.shift
     xcode_version = ARGV.shift
@@ -543,7 +543,7 @@ when 'create-release-workflow'
     configuration = ARGV.shift
     usage unless platform and xcode_version and target and configuration
     id = create_release_workflow(platform, xcode_version, target, configuration)
-    pp id
+    puts id
 when 'wait-build'
     build_id = ARGV.shift
     usage unless build_id
