@@ -1331,7 +1331,7 @@ case "$COMMAND" in
             unzip_artifact "$file"
         done
 
-        ./scripts/github_release.rb create-release -"$VERSION"
+        ./scripts/github_release.rb create-release "$VERSION"
         exit 0
         ;;
 
