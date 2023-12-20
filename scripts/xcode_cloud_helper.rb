@@ -118,6 +118,11 @@ def get_artifacts(build_action)
         }
     end
 end
+
+def get_git_references
+    repository_id = get_realm_repository_id
+    get("/scmRepositories/#{repository_id}/gitReferences?limit=200")
+end
  
 def get_workflow_info(id)
     get("ciWorkflows/#{id}")
@@ -398,7 +403,8 @@ end
 
 def find_git_reference_for_branch(branch)
     next_page = ''
-    references = get_git_references
+    response = get_git_references
+    references = JSON.parse(response.body)
     branch_reference = references["data"].find { |reference| 
         reference["attributes"]["kind"] == "BRANCH" && reference["attributes"]["name"] == branch 
     }    
