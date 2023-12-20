@@ -403,8 +403,7 @@ end
 
 def find_git_reference_for_branch(branch)
     next_page = ''
-    response = get_git_references
-    references = JSON.parse(response.body)
+    references = get_git_references
     branch_reference = references["data"].find { |reference| 
         reference["attributes"]["kind"] == "BRANCH" && reference["attributes"]["name"] == branch 
     }    
