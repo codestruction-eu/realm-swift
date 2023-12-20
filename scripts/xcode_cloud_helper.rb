@@ -564,7 +564,7 @@ when 'build-workflow'
     workflow_id = ARGV.shift
     branch = ARGV.shift
     usage unless workflow_id
-    id = start_build(workflow_id)
+    id = start_build(workflow_id, branch)
     pp id
 when 'create-release-workflow'
     platform = ARGV.shift
