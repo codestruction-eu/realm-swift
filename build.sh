@@ -332,7 +332,7 @@ create_xcframework() {
         -framework "$os_path" "${simulator_framework[@]}"
 }
 
-unzip_file() {
+unzip_product() {
     file_name="$1"
     new_file_name="$2"
 
@@ -341,6 +341,18 @@ unzip_file() {
 
     rm $file_name.zip
     rm -rf $file_name
+}
+
+# Artifacts are zipped by the artifacts store so they're endup nested zipped, so we need to unzip this zip.
+unzip_artifact() {
+    zip_file="$1"
+    file_name=${zip_file%.*}
+
+    unzip "$file_name.zip" -d "$file_name/"
+    rm "$file_name.zip"
+
+    mv "$file_name/$file_name.zip" .
+    rm -rf "$file_name"
 }
 
 clean_retrieve() {
@@ -1124,20 +1136,20 @@ case "$COMMAND" in
         platform="$2"
         xcode_version=$(echo "$COMMAND" | cut -d_ -f2 ) 
         
-        unzip_file package-$platform-$xcode_version-Realm-release package-$platform-Realm-release
-        unzip_file package-$platform-$xcode_version-RealmSwift-release package-$platform-RealmSwift-release
+        unzip_product package-$platform-$xcode_version-Realm-release package-$platform-Realm-release
+        unzip_product package-$platform-$xcode_version-RealmSwift-release package-$platform-RealmSwift-release
         
         if [ "$platform" == "ios" ] || [ "$platform" == "tvos" ] || [ "$platform" == "watchos" ] || [ "$platform" == "visionos" ]; then
-            unzip_file package-${platform}simulator-$xcode_version-Realm-release package-${platform}simulator-Realm-release
-            unzip_file package-${platform}simulator-$xcode_version-RealmSwift-release package-${platform}simulator-RealmSwift-release
+            unzip_product package-${platform}simulator-$xcode_version-Realm-release package-${platform}simulator-Realm-release
+            unzip_product package-${platform}simulator-$xcode_version-RealmSwift-release package-${platform}simulator-RealmSwift-release
         fi
 
         create_xcframework Realm "$platform" Release
         create_xcframework RealmSwift "$platform" Release
 
         if [ "$platform" = "ios" ] ; then
-            unzip_file package-$platform-$xcode_version-Realm-static package-$platform-Realm-static
-            unzip_file package-${platform}simulator-$xcode_version-Realm-static package-${platform}simulator-Realm-static
+            unzip_product package-$platform-$xcode_version-Realm-static package-$platform-Realm-static
+            unzip_product package-${platform}simulator-$xcode_version-Realm-static package-${platform}simulator-Realm-static
 
             create_xcframework Realm "${platform}" Static
         else
@@ -1314,11 +1326,19 @@ case "$COMMAND" in
 
     "publish-github")
         VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${source_root}/dependencies.list")"
+
+        for file in $(find . -type f -name "*.zip" -maxdepth 1); do
+            unzip_artifact "$file"
+        done
+
         ./scripts/github_release.rb create-release -"$VERSION"
         exit 0
         ;;
 
     "publish-docs")
+        unzip_artifact realm-docs.zip
+        unzip realm-docs.zip
+        
         VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${source_root}/dependencies.list")"
         PRERELEASE_REGEX='alpha|beta|rc|preview'
         if [[ $VERSION =~ $PRERELEASE_REGEX ]]; then
