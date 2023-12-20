@@ -336,6 +336,7 @@ def wait_build(build_run)
     
     build_state = get_build_info(build_run)
     completion_status = build_state["data"]["attributes"]["completionStatus"]
+    puts "Completion status #{completion_status}"
     get_logs_for_build(build_run)
     if completion_status != 'SUCCEEDED'
        puts "Completion status #{completion_status}"
@@ -346,12 +347,12 @@ end
 
 def get_logs_for_build(build_run)
     actions = get_build_actions(build_run)
-    artifacts = get_artifacts(actions[0]["id"]) # we are only running one actions, so we use the first one in the list
+    artifacts = get_artifacts(actions[0][:id]) # we are only running one actions, so we use the first one in the list
     artifact_url = ''
     artifacts.each { |artifact| 
-        artifact_info = get_artifact_info(artifact['id'])
+        artifact_info = get_artifact_info(artifact[:id])
         if artifact_info["data"]["attributes"]["fileName"].include? 'Logs' 
-            artifact_url = result["data"]["attributes"]["downloadUrl"]
+            artifact_url = artifact_info["data"]["attributes"]["downloadUrl"]
         end
     }
     print_logs(artifact_url)
@@ -385,11 +386,11 @@ end
 
 def download_artifact_for_build(build_id_run)
     actions = get_build_actions(build_id_run)
-    artifacts = get_artifacts(actions[0]["id"]) # One actions per workflow
+    artifacts = get_artifacts(actions[0][:id]) # One actions per workflow
     artifact_url = ''
     artifacts.each { |artifact| 
-        artifact_info = get_artifact_info(artifact['id'])
-        if result["data"]["attributes"]["fileName"].include? 'Products' 
+        artifact_info = get_artifact_info(artifact[:id])
+        if artifact_info["data"]["attributes"]["fileName"].include? 'Products' 
             artifact_url = artifact_info["data"]["attributes"]["downloadUrl"]
         end
     }
