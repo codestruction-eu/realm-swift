@@ -224,34 +224,6 @@ def delete_workflow(id)
 end
 
 def start_build(id, branch)
-    url = "#{APP_STORE_URL}/ciBuildRuns"
-    uri = URI.parse(url)
-    http = Net::HTTP.new(uri.host, uri.port)
-    http.use_ssl = true
-    request = Net::HTTP::Post.new(uri)
-    request["Authorization"] = "Bearer #{JWT_BEARER}"
-    request["Content-type"] = "application/json"
-    branch_id = find_git_reference_for_branch(branch)
-    data =
-    {
-        "type" => "ciBuildRuns",
-        "attributes" => { "clean" => true },
-        "relationships" => { "workflow" => { "data" => { "type" => "ciWorkflows", "id" => id }},
-                            "sourceBranchOrTag" => { "data" => { "type" => "scmGitReferences", "id" => branch_id }}}
-    }
-    body = { "data" => data }
-    request.body = body.to_json
-    response = http.request(request)
-    if response.code == "201"
-        result = JSON.parse(response.body)
-        build_id = result["data"]["id"]
-        return build_id
-    else
-        raise "Error: #{response.code} #{response.body}"
-    end
-end
-
-def start_build(id, branch)
     branch_id = find_git_reference_for_branch(branch)
     result = post('ciBuildRuns', {
         data: {
@@ -274,8 +246,6 @@ def start_build(id, branch)
         }
     })
     id = result['data']['id']
-    puts "Workflow build started with id: #{id}:"
-    puts result
     return id
 end
 
@@ -410,8 +380,7 @@ def find_git_reference_for_branch(branch)
     while branch_reference == nil || next_page == nil
         next_page = references["links"]["next"]
         next_page.slice!(APP_STORE_URL)
-        next_results = get(next_page)
-        references = JSON.parse(next_results.body)
+        references = get(next_page)
         branch_reference = references["data"].find { |reference| reference["attributes"]["kind"] == "BRANCH" && reference["attributes"]["name"] == branch } 
     end
     return branch_reference["id"]
