@@ -99,24 +99,24 @@ jobs:
         max-parallel: 20 # Blocks of 20, therefore if any of the build fails, we don't get a lot of XCode Clouds builds hanging, which are expensive.
         matrix:
           platform: ${{ fromJSON(needs.prepare.outputs.BUILD_PLATFORM_MATRIX) }}
-          target: [RealmSwift, Realm]
+          target: [RealmSwift]
           xcode-version: ${{ fromJSON(needs.prepare.outputs.XCODE_VERSIONS_MATRIX) }}
-          configuration: [release, static]
-          exclude:
-            - platform: osx
-              configuration: static
-            - platform: tvos
-              configuration: static
-            - platform: watchos
-              configuration: static
-            - platform: catalyst
-              configuration: static
-            - platform: tvossimulator
-              configuration: static
-            - platform: watchossimulator
-              configuration: static
-            - target: RealmSwift
-              configuration: static
+          configuration: [release]
+          # exclude:
+          #   - platform: osx
+          #     configuration: static
+          #   - platform: tvos
+          #     configuration: static
+          #   - platform: watchos
+          #     configuration: static
+          #   - platform: catalyst
+          #     configuration: static
+          #   - platform: tvossimulator
+          #     configuration: static
+          #   - platform: watchossimulator
+          #     configuration: static
+          #   - target: RealmSwift
+          #     configuration: static
           # include: 
           #   - platform: visionos
           #     target: Realm
@@ -140,7 +140,7 @@ jobs:
         - name: Get Token
           id: token
           run: |
-            token=$(echo $(ruby ./scripts/xcode_cloud_helper.rb --isuer-id ${{ secrets.APPLE_STORE_CONNECT_ISSUER_ID }} \ 
+            token=$(echo $(ruby ./scripts/xcode_cloud_helper.rb --issuer-id ${{ secrets.APPLE_STORE_CONNECT_ISSUER_ID }} \ 
               --key-id ${{ secrets.APPLE_STORE_CONNECT_KEY_ID }} --pk ${{ secrets.APPLE_STORE_CONNECT_API_KEY }} --get-token))
             echo "TOKEN=$token" >> $GITHUB_OUTPUT
         - name: Creates on demand XCode Cloud's workflows with a build action for ${{ matrix.platform }} in ${{ matrix.xcode-version }} with configuration ${{ matrix.configuration }}
