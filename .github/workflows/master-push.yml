@@ -4,9 +4,9 @@ on:
     branches:
       - "master"
 env:
-  XCODE_VERSION: "['14.1', '14.2', '14.3.1', '15.0.1', '15.1']"
-  PLATFORM: "['ios', 'osx', 'watchos', 'tvos', 'catalyst', 'visionos']"
-  BUILD_PLATFORM: "['ios', 'iossimulator', 'osx', 'watchos', 'watchossimulator', 'tvos', 'tvossimulator', 'catalyst']"
+  XCODE_VERSION: "['14.1']"
+  PLATFORM: "['ios']"
+  BUILD_PLATFORM: "['ios', 'iossimulator']"
   DOC_VERSION: '14.3.1'
   JAZZY_VERSION: '0.14.4'
   XCFRAMEWORK_VERSION: '15.0.1'
@@ -117,23 +117,23 @@ jobs:
               configuration: static
             - target: RealmSwift
               configuration: static
-          include: 
-            - platform: visionos
-              target: Realm
-              xcode-version: 15.1
-              configuration: release
-            - platform: visionos
-              target: RealmSwift
-              xcode-version: 15.1
-              configuration: release
-            - platform: visionossimulator
-              target: Realm
-              xcode-version: 15.1
-              configuration: release
-            - platform: visionossimulator
-              target: RealmSwift
-              xcode-version: 15.1
-              configuration: release
+          # include: 
+          #   - platform: visionos
+          #     target: Realm
+          #     xcode-version: 15.1
+          #     configuration: release
+          #   - platform: visionos
+          #     target: RealmSwift
+          #     xcode-version: 15.1
+          #     configuration: release
+          #   - platform: visionossimulator
+          #     target: Realm
+          #     xcode-version: 15.1
+          #     configuration: release
+          #   - platform: visionossimulator
+          #     target: RealmSwift
+          #     xcode-version: 15.1
+          #     configuration: release
       steps:
         - name: Checkout
           uses: actions/checkout@v4
