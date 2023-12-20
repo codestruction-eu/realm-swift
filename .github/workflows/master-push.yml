@@ -2,7 +2,7 @@ name: Prepare Release
 on:
   push:
     branches:
-      - "master"
+      - "dp/test_xcode_cloud_release"
 env:
   XCODE_VERSION: "['14.1']"
   PLATFORM: "['ios']"
