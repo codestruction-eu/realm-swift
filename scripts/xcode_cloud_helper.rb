@@ -246,7 +246,7 @@ def start_build(id, branch)
     end
 end
 
-def start_build(id)
+def start_build(id, branch)
     branch_id = find_git_reference_for_branch(branch)
     result = post('ciBuildRuns', {
         data: {
@@ -492,7 +492,7 @@ $parser = OptionParser.new do |opts|
       wait-build build_id
         Check status of a current build and waits, returns when completed or fails.
       download-artifact build_id
-        Download a build artifact for any given build run.
+        Download a build artifact for any given build run with a build action.
       get-token
         Get Apple Connect Store API Token for local use.
 
