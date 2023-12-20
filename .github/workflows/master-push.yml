@@ -154,7 +154,7 @@ jobs:
             echo "BUILD_RUN_ID=$build_run_id" >> $GITHUB_OUTPUT
         - name: Check build status and wait for it to finish
           run: |
-            ruby ./scripts/xcode_cloud_helper.rb wait-build ${{ steps.create-workflow.outputs.BUILD_RUN_ID }} --t ${{ steps.token.outputs.TOKEN }}
+            ruby ./scripts/xcode_cloud_helper.rb wait-build ${{ steps.build-run.outputs.BUILD_RUN_ID }} --t ${{ steps.token.outputs.TOKEN }}
         - name: Download package from XCode Cloud artifacts ${{ matrix.platform }} in ${{ matrix.xcode-version }} with configuration ${{ matrix.configuration }}
           run: |
             ruby ./scripts/xcode_cloud_helper.rb download-artifact ${{ steps.build-run.outputs.BUILD_RUN_ID }} --t ${{ steps.token.outputs.TOKEN }}
