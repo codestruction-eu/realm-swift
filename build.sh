@@ -1326,24 +1326,33 @@ case "$COMMAND" in
     ######################################
 
     "publish-github")
+        sha="$2"
         VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${source_root}/dependencies.list")"
+
+        # Exclude docs because we don't want it for the release
+        ./scripts/github_release.rb download-all-artifacts "${sha}" realm-docs
 
         mkdir -p release_pkg
         export -f unzip_artifact
-        # find . -name '*.zip' -maxdepth 1 \
-        #     | sed 's|^./||' \
-        #     | xargs -I {} bash -c 'unzip_artifact "{}" release_pkg/'
+        find . -name '*.zip' -maxdepth 1 \
+            | sed 's|^./||' \
+            | xargs -I {} bash -c 'unzip_artifact "{}" release_pkg/'
 
         ./scripts/github_release.rb create-release "$VERSION"
         exit 0
         ;;
 
     "publish-docs")
+        sha="$2"
+        # Exclude docs because we don't want it for the release
+        ./scripts/github_release.rb download-artifact realm-docs "${sha}"
+        unzip_artifact realm-docs.zip
         unzip realm-docs.zip
         
         VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${source_root}/dependencies.list")"
         PRERELEASE_REGEX='alpha|beta|rc|preview'
         if [[ $VERSION =~ $PRERELEASE_REGEX ]]; then
+          echo "Pre-release version"
           exit 0
         fi
 

@@ -4,14 +4,17 @@ require 'pathname'
 require 'octokit'
 require 'fileutils'
 
-VERSION = ARGV[1]
 ACCESS_TOKEN = ENV['GITHUB_ACCESS_TOKEN']
 raise 'GITHUB_ACCESS_TOKEN must be set to create GitHub releases' unless ACCESS_TOKEN
 
 BUILD_SH = Pathname(__FILE__).+('../../build.sh').expand_path
-RELEASE = "v#{VERSION}"
 
 REPOSITORY = 'realm/realm-swift'
+
+def sh(*args)
+  puts "executing: #{args.join(' ')}" if false
+  system(*args, false ? {} : {:out => '/dev/null'}) || exit(1)
+end
 
 def release_notes(version)
   changelog = BUILD_SH.parent.+('CHANGELOG.md').readlines
@@ -28,14 +31,14 @@ def release_notes(version)
   relevant.join.strip
 end
 
-def create_release
-  release_notes = release_notes(VERSION)
+def create_release(version)
+  release_notes = release_notes(version)
   github = Octokit::Client.new
   github.access_token = ENV['GITHUB_ACCESS_TOKEN']
 
   puts 'Creating GitHub release'
-  prerelease = (VERSION =~ /alpha|beta|rc|preview/) ? true : false
-  # response = github.create_release(REPOSITORY, RELEASE, name: RELEASE, body: release_notes, prerelease: prerelease)
+  prerelease = (version =~ /alpha|beta|rc|preview/) ? true : false
+  # response = github.create_release(REPOSITORY, "v#{version}", name: RELEASE, body: release_notes, prerelease: prerelease)
   # release_url = response[:url]
 
   Dir.glob 'release_pkg/*.zip' do |upload|
@@ -51,8 +54,44 @@ def package_release_notes
   out_file.puts(release_notes)
 end
 
+def download_all_artifacts(sha, excluding)
+  github = Octokit::Client.new
+  github.access_token = ENV['GITHUB_ACCESS_TOKEN']
+
+  response = github.repository_artifacts(REPOSITORY)
+  sha_artifacts = response[:artifacts].filter { |artifact| artifact[:workflow_run][:head_sha] == sha && artifact[:name] != excluding }
+  sha_artifacts.each { |artifact|
+    download_url = github.artifact_download_url(REPOSITORY, artifact[:id])
+    download(artifact[:name], download_url)
+  }
+end
+
+def download_artifact(name, sha)
+  puts "Downloading artifact #{name}"
+  github = Octokit::Client.new
+  github.access_token = ENV['GITHUB_ACCESS_TOKEN']
+
+  response = github.repository_artifacts(REPOSITORY)
+  selected_artifact = response[:artifacts].find {|artifact| artifact[:name] == name and artifact[:workflow_run][:head_sha] == sha }
+  download_url = github.artifact_download_url(REPOSITORY, selected_artifact[:id])
+  download(selected_artifact[:name], download_url)
+end
+
+def download(name, url)
+  sh 'curl', '--output', "#{name}.zip", "#{url}"
+end
+
 if ARGV[0] == 'create-release'
-  create_release
+  version = ARGV[1]
+  create_release(version)
 elsif ARGV[0] == 'package-release-notes'
   package_release_notes
+elsif ARGV[0] == 'download-artifact'
+  name = ARGV[1]
+  sha = ARGV[2]
+  download_artifact(name, sha)
+elsif ARGV[0] == 'download-all-artifacts'
+  sha = ARGV[1]
+  excluding = ARGV[2]
+  download_all_artifacts(sha, excluding)
 end
