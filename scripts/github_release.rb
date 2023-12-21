@@ -4,9 +4,6 @@ require 'pathname'
 require 'octokit'
 require 'fileutils'
 
-ACCESS_TOKEN = ENV['GITHUB_ACCESS_TOKEN']
-raise 'GITHUB_ACCESS_TOKEN must be set to create GitHub releases' unless ACCESS_TOKEN
-
 BUILD_SH = Pathname(__FILE__).+('../../build.sh').expand_path
 
 REPOSITORY = 'realm/realm-swift'
@@ -32,6 +29,9 @@ def release_notes(version)
 end
 
 def create_release(version)
+  ACCESS_TOKEN = ENV['GITHUB_ACCESS_TOKEN']
+  raise 'GITHUB_ACCESS_TOKEN must be set to create GitHub releases' unless ACCESS_TOKEN
+
   release_notes = release_notes(version)
   github = Octokit::Client.new
   github.access_token = ENV['GITHUB_ACCESS_TOKEN']
@@ -56,6 +56,9 @@ def package_release_notes(version)
 end
 
 def download_all_artifacts(sha, excluding)
+  ACCESS_TOKEN = ENV['GITHUB_ACCESS_TOKEN']
+  raise 'GITHUB_ACCESS_TOKEN must be set to create GitHub releases' unless ACCESS_TOKEN
+
   github = Octokit::Client.new
   github.access_token = ENV['GITHUB_ACCESS_TOKEN']
 
@@ -68,6 +71,9 @@ def download_all_artifacts(sha, excluding)
 end
 
 def download_artifact(name, sha)
+  ACCESS_TOKEN = ENV['GITHUB_ACCESS_TOKEN']
+  raise 'GITHUB_ACCESS_TOKEN must be set to create GitHub releases' unless ACCESS_TOKEN
+  
   puts "Downloading artifact #{name}"
   github = Octokit::Client.new
   github.access_token = ENV['GITHUB_ACCESS_TOKEN']
