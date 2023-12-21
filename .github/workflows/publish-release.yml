@@ -117,6 +117,8 @@ jobs:
           exclude:
             - installation: carthage
               linkage: static
+            - platform: catalyst
+              installation: carthage
             - platform: osx
               installation: xcframework
               linkage: static
