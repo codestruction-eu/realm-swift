@@ -159,6 +159,8 @@ jobs:
       runs-on: macos-latest
       name: Publish to release Slack channel
       needs: [prepare]
+      env:
+        WEBHOOK_URL: ${{ secrets.SLACK_RELEASE_WEBHOOK }}
       steps:
         - name: Checkout
           uses: actions/checkout@v4
@@ -174,5 +176,5 @@ jobs:
           with:
             changelog: ExtractedChangelog/CHANGELOG.md
             sdk: Swift
-            webhook-url: ${{ secrets.SLACK_RELEASE_WEBHOOK }}
+            webhook-url: ${{ env.WEBHOOK_URL }}
             version: ${{ needs.prepare.outputs.VERSION }}
