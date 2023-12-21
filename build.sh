@@ -345,13 +345,14 @@ unzip_product() {
 
 # Artifacts are zipped by the artifacts store so they're endup nested zipped, so we need to unzip this zip.
 unzip_artifact() {
-    zip_file="$1"
-    file_name=${zip_file%.*}
+    initial_path="$1"
+    out_path="$2"
+    file_name=${initial_path%.*}
 
-    unzip "$file_name.zip" -d "$file_name/"
+    unzip "$file_name.zip" -d "$file_name"
     rm "$file_name.zip"
 
-    mv "$file_name/$file_name.zip" .
+    mv "$file_name/$file_name.zip" "$out_path$file_name.zip"
     rm -rf "$file_name"
 }
 
@@ -1327,9 +1328,12 @@ case "$COMMAND" in
     "publish-github")
         VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${source_root}/dependencies.list")"
 
-        for file in $(find . -type f -name "*.zip" -maxdepth 1); do
-            unzip_artifact "$file"
-        done
+        rm realm-docs.zip # We don't want to upload this to the release package
+        mkdir -p release_pkg
+        export -f unzip_artifact
+        find . -name '*.zip' -maxdepth 1 \
+            | sed 's|^./||' \
+            | xargs -I {} bash -c 'unzip_artifact "{}" release_pkg/'
 
         ./scripts/github_release.rb create-release "$VERSION"
         exit 0

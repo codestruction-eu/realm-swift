@@ -71,7 +71,7 @@ jobs:
           run: |
             gem install octokit
             gem install pathname
-            gem install fileutils
+            gem install fileutils 
         - name: Export GITHUB_TOKEN to workspace
           run: echo "GITHUB_ACCESS_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
         - name: Download all artifacts
@@ -79,7 +79,7 @@ jobs:
           with:
             workflow: master-push.yml
             commit: ecf364a2da29aa459eedfe55cf5c5715a6c97ed2
-            path: ${{ github.workspace }}/release_pkg
+            path: ${{ github.workspace }}
             workflow_conclusion: completed
         - name: Create Github release
           run: ./build.sh publish-github
