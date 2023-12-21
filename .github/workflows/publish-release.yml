@@ -45,16 +45,16 @@ jobs:
       steps:
         - name: Checkout
           uses: actions/checkout@v4
-        - name: Install ruby
-          uses: ruby/setup-ruby@ec02537da5712d66d4d50a0f33b7eb52773b5ed1
-          with:
-            ruby-version: '3.1.2'
-            bundler-cache: true
+        - name: Gem install
+          run: |
+            gem install octokit
+            gem install pathname
+            gem install fileutils 
         - name: Export GITHUB_TOKEN to workspace
           run: echo "GITHUB_ACCESS_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
         - name: Publish docs
           run: |
-              sh -x build.sh publish-docs
+              sh -x build.sh publish-docs ecf364a2da29aa459eedfe55cf5c5715a6c97ed2
   create-release:
       runs-on: macos-latest
       name: Create github release
@@ -70,7 +70,7 @@ jobs:
         - name: Export GITHUB_TOKEN to workspace
           run: echo "GITHUB_ACCESS_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
         - name: Create Github release
-          run: ./build.sh publish-github
+          run: ./build.sh publish-github ecf364a2da29aa459eedfe55cf5c5715a6c97ed2
   # publish-cocoapods:
   #     runs-on: macos-latest
   #     name: Publish Cocoapods specs
