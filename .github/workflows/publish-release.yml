@@ -36,41 +36,41 @@ jobs:
   #           tag: "v${{ needs.prepare.outputs.VERSION }}"
   #           tag_exists_error: false
   #           message: ""
-  publish-docs:
-      runs-on: macos-latest
-      name: Publish docs to S3 Bucket
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      steps:
-        - name: Checkout
-          uses: actions/checkout@v4
-        - name: Gem install
-          run: |
-            gem install octokit
-            gem install pathname
-            gem install fileutils 
-        - name: Export GITHUB_TOKEN to workspace
-          run: echo "GITHUB_ACCESS_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
-        - name: Publish docs
-          run: |
-              sh -x build.sh publish-docs ecf364a2da29aa459eedfe55cf5c5715a6c97ed2
-  create-release:
-      runs-on: macos-latest
-      name: Create github release
-      needs: prepare
-      steps:
-        - name: Checkout
-          uses: actions/checkout@v4
-        - name: Gem install
-          run: |
-            gem install octokit
-            gem install pathname
-            gem install fileutils 
-        - name: Export GITHUB_TOKEN to workspace
-          run: echo "GITHUB_ACCESS_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
-        - name: Create Github release
-          run: ./build.sh publish-github ecf364a2da29aa459eedfe55cf5c5715a6c97ed2
+  # publish-docs:
+  #     runs-on: macos-latest
+  #     name: Publish docs to S3 Bucket
+  #     env:
+  #       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  #       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  #     steps:
+  #       - name: Checkout
+  #         uses: actions/checkout@v4
+  #       - name: Gem install
+  #         run: |
+  #           gem install octokit
+  #           gem install pathname
+  #           gem install fileutils 
+  #       - name: Export GITHUB_TOKEN to workspace
+  #         run: echo "GITHUB_ACCESS_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
+  #       - name: Publish docs
+  #         run: |
+  #             sh -x build.sh publish-docs ecf364a2da29aa459eedfe55cf5c5715a6c97ed2
+  # create-release:
+  #     runs-on: macos-latest
+  #     name: Create github release
+  #     needs: prepare
+  #     steps:
+  #       - name: Checkout
+  #         uses: actions/checkout@v4
+  #       - name: Gem install
+  #         run: |
+  #           gem install octokit
+  #           gem install pathname
+  #           gem install fileutils 
+  #       - name: Export GITHUB_TOKEN to workspace
+  #         run: echo "GITHUB_ACCESS_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
+  #       - name: Create Github release
+  #         run: ./build.sh publish-github ecf364a2da29aa459eedfe55cf5c5715a6c97ed2
   # publish-cocoapods:
   #     runs-on: macos-latest
   #     name: Publish Cocoapods specs
@@ -151,7 +151,7 @@ jobs:
             xcode-version: ${{ matrix.xcode-version }}
         - name: Run installation test
           run: |
-            echo "REALM_TEST_RELEASE=${{ needs.prepare.outputs.VERSION }}" >> $GITHUB_OUTPUT
+            echo "REALM_TEST_RELEASE=${{ needs.prepare.outputs.VERSION }}" >> $GITHUB_ENV
             cd examples/installation
             ./build.rb ${{ matrix.platform }} ${{ matrix.installation }} ${{ matrix.linkage }}
   post-slack-release:
