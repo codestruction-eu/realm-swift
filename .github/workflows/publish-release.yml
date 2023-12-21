@@ -160,7 +160,7 @@ jobs:
       name: Publish to release Slack channel
       needs: [prepare]
       env:
-        WEBHOOK_URL: ${{ secrets.SLACK_RELEASE_WEBHOOK }}
+        WEBHOOK_URL: ${{ secrets.SLACK_RELEASES_WEBHOOK }}
       steps:
         - name: Checkout
           uses: actions/checkout@v4
