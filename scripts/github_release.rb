@@ -35,12 +35,12 @@ def create_release
 
   puts 'Creating GitHub release'
   prerelease = (VERSION =~ /alpha|beta|rc|preview/) ? true : false
-  response = github.create_release(REPOSITORY, RELEASE, name: RELEASE, body: release_notes, prerelease: prerelease)
-  release_url = response[:url]
+  # response = github.create_release(REPOSITORY, RELEASE, name: RELEASE, body: release_notes, prerelease: prerelease)
+  # release_url = response[:url]
 
   Dir.glob 'release_pkg/*.zip' do |upload|
     puts "Uploading #{upload} to GitHub"
-    github.upload_asset(release_url, upload, content_type: 'application/zip')
+    # github.upload_asset(release_url, upload, content_type: 'application/zip')
   end
 end
 

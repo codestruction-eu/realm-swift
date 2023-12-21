@@ -1328,7 +1328,6 @@ case "$COMMAND" in
     "publish-github")
         VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${source_root}/dependencies.list")"
 
-        rm realm-docs.zip # We don't want to upload this to the release package
         mkdir -p release_pkg
         export -f unzip_artifact
         find . -name '*.zip' -maxdepth 1 \
