@@ -79,7 +79,6 @@ jobs:
           with:
             workflow: master-push.yml
             commit: ecf364a2da29aa459eedfe55cf5c5715a6c97ed2
-            path: ${{ github.workspace }}
             workflow_conclusion: completed
         - name: Create Github release
           run: ./build.sh publish-github
