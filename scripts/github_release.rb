@@ -29,8 +29,8 @@ def release_notes(version)
 end
 
 def create_release(version)
-  ACCESS_TOKEN = ENV['GITHUB_ACCESS_TOKEN']
-  raise 'GITHUB_ACCESS_TOKEN must be set to create GitHub releases' unless ACCESS_TOKEN
+  access_token = ENV['GITHUB_ACCESS_TOKEN']
+  raise 'GITHUB_ACCESS_TOKEN must be set to create GitHub releases' unless access_token
 
   release_notes = release_notes(version)
   github = Octokit::Client.new
@@ -56,8 +56,8 @@ def package_release_notes(version)
 end
 
 def download_all_artifacts(sha, excluding)
-  ACCESS_TOKEN = ENV['GITHUB_ACCESS_TOKEN']
-  raise 'GITHUB_ACCESS_TOKEN must be set to create GitHub releases' unless ACCESS_TOKEN
+  access_token = ENV['GITHUB_ACCESS_TOKEN']
+  raise 'GITHUB_ACCESS_TOKEN must be set to create GitHub releases' unless access_token
 
   github = Octokit::Client.new
   github.access_token = ENV['GITHUB_ACCESS_TOKEN']
@@ -71,9 +71,9 @@ def download_all_artifacts(sha, excluding)
 end
 
 def download_artifact(name, sha)
-  ACCESS_TOKEN = ENV['GITHUB_ACCESS_TOKEN']
-  raise 'GITHUB_ACCESS_TOKEN must be set to create GitHub releases' unless ACCESS_TOKEN
-  
+  access_token = ENV['GITHUB_ACCESS_TOKEN']
+  raise 'GITHUB_ACCESS_TOKEN must be set to create GitHub releases' unless access_token
+
   puts "Downloading artifact #{name}"
   github = Octokit::Client.new
   github.access_token = ENV['GITHUB_ACCESS_TOKEN']
