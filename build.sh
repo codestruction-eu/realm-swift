@@ -1330,16 +1330,15 @@ case "$COMMAND" in
 
         mkdir -p release_pkg
         export -f unzip_artifact
-        find . -name '*.zip' -maxdepth 1 \
-            | sed 's|^./||' \
-            | xargs -I {} bash -c 'unzip_artifact "{}" release_pkg/'
+        # find . -name '*.zip' -maxdepth 1 \
+        #     | sed 's|^./||' \
+        #     | xargs -I {} bash -c 'unzip_artifact "{}" release_pkg/'
 
         ./scripts/github_release.rb create-release "$VERSION"
         exit 0
         ;;
 
     "publish-docs")
-        unzip_artifact realm-docs.zip
         unzip realm-docs.zip
         
         VERSION="$(sed -n 's/^VERSION=\(.*\)$/\1/p' "${source_root}/dependencies.list")"

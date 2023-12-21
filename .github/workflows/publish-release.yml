@@ -81,8 +81,6 @@ jobs:
             commit: ecf364a2da29aa459eedfe55cf5c5715a6c97ed2
             path: ${{ github.workspace }}
             workflow_conclusion: completed
-        - name: Export GITHUB_TOKEN to workspace
-          run: rm realm-docs.zip
         - name: Create Github release
           run: ./build.sh publish-github
   # publish-cocoapods:
