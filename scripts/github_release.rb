@@ -38,7 +38,7 @@ def create_release(version)
 
   puts 'Creating GitHub release'
   prerelease = (version =~ /alpha|beta|rc|preview/) ? true : false
-  response = github.create_release(REPOSITORY, "v#{version}", name: RELEASE, body: release_notes, prerelease: prerelease)
+  response = github.create_release(REPOSITORY, "v#{version}", name: "v#{version}", body: release_notes, prerelease: prerelease)
   release_url = response[:url]
 
   Dir.glob 'release_pkg/*.zip' do |upload|
@@ -47,8 +47,8 @@ def create_release(version)
   end
 end
 
-def package_release_notes
-  release_notes = release_notes(VERSION)
+def package_release_notes(version)
+  release_notes = release_notes(version)
   FileUtils.mkdir_p("ExtractedChangelog")
   out_file = File.new("ExtractedChangelog/CHANGELOG.md", "w")
   out_file.puts(release_notes)
@@ -85,7 +85,8 @@ if ARGV[0] == 'create-release'
   version = ARGV[1]
   create_release(version)
 elsif ARGV[0] == 'package-release-notes'
-  package_release_notes
+  version = ARGV[1]
+  package_release_notes(version)
 elsif ARGV[0] == 'download-artifact'
   name = ARGV[1]
   sha = ARGV[2]
