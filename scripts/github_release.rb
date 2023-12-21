@@ -38,7 +38,8 @@ def create_release(version)
 
   puts 'Creating GitHub release'
   prerelease = (version =~ /alpha|beta|rc|preview/) ? true : false
-  response = github.create_release(REPOSITORY, "v#{version}", name: "v#{version}", body: release_notes, prerelease: prerelease)
+  release = "v#{version}"
+  response = github.create_release(REPOSITORY, release, name: release, body: release_notes, prerelease: prerelease)
   release_url = response[:url]
 
   Dir.glob 'release_pkg/*.zip' do |upload|
