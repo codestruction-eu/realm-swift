@@ -107,7 +107,7 @@ jobs:
   test-installation:
       runs-on: macos-13
       name: Run installation test for ${{ matrix.platform }}, ${{ matrix.installation }} and ${{ matrix.linkage }}
-      needs: [create-release, prepare]
+      needs: [prepare]
       env:
         XCODE_VERSION: '15.1'
       strategy:
