@@ -6,7 +6,7 @@ x.y.z Release notes (yyyy-MM-dd)
   ```swift
   Logger.setLogLevel(.info, category: Category.Storage.transactions)
   ```
-* Throw any sync errors tagged with warning action from the server via the sync error handler. 
+* Report sync warnings from the server such as sync being disabled server-side to the sync error handler.
   ([#8020](https://github.com/realm/realm-swift/issues/8020)).
 
 ### Fixed
